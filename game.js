@@ -32,7 +32,9 @@ const GAME_CONFIG = {
 let gameState = {
     running: false,
     gameOver: false,
-    winner: null
+    winner: null,
+    startTime: null,
+    elapsedTime: 0
 };
 
 // Canvas and context
@@ -45,7 +47,7 @@ let arenaVertices = [];
 
 // UI elements
 let bot1HealthEl, bot2HealthEl, bot1PointsEl, bot2PointsEl;
-let gameOverEl, winnerMessageEl, restartBtnEl;
+let gameOverEl, winnerMessageEl, restartBtnEl, gameTimerEl;
 
 // Vector utility functions
 class Vector2 {
@@ -298,6 +300,7 @@ function init() {
     gameOverEl = document.getElementById('gameOver');
     winnerMessageEl = document.getElementById('winnerMessage');
     restartBtnEl = document.getElementById('restartBtn');
+    gameTimerEl = document.getElementById('gameTimer');
     
     // Event listeners
     restartBtnEl.addEventListener('click', startGame);
@@ -329,6 +332,8 @@ function startGame() {
     gameState.running = true;
     gameState.gameOver = false;
     gameState.winner = null;
+    gameState.startTime = Date.now();
+    gameState.elapsedTime = 0;
     
     // Hide game over screen
     gameOverEl.style.display = 'none';
@@ -516,6 +521,13 @@ function endGame(winnerId) {
 }
 
 function updateUI() {
+    // Update timer
+    if (gameState.startTime) {
+        gameState.elapsedTime = Date.now() - gameState.startTime;
+        const formattedTime = formatTime(gameState.elapsedTime);
+        gameTimerEl.textContent = formattedTime;
+    }
+    
     // Update health bars
     const bot1HealthPercent = (bots[0].health / GAME_CONFIG.game.maxHealth) * 100;
     const bot2HealthPercent = (bots[1].health / GAME_CONFIG.game.maxHealth) * 100;
@@ -534,6 +546,15 @@ function updateUI() {
     if (bots[1].health <= 2) {
         bot2HealthEl.style.background = 'linear-gradient(90deg, #e74c3c, #c0392b)';
     }
+}
+
+// Format time in MM:SS format
+function formatTime(milliseconds) {
+    const totalSeconds = Math.floor(milliseconds / 1000);
+    const minutes = Math.floor(totalSeconds / 60);
+    const seconds = totalSeconds % 60;
+    
+    return `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
 }
 
 function draw() {
