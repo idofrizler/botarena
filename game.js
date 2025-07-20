@@ -142,6 +142,9 @@ class Bot {
 
         // Reset squash animation
         this.squashScale = Math.min(this.squashScale + 0.05, 1);
+        
+        // Rotate the achilles heel continuously
+        this.bodyAngle += 0.02; // Slow rotation speed
     }
 
     getAchillesHeelArc() {
