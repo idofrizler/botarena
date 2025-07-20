@@ -34,7 +34,11 @@ let gameState = {
     gameOver: false,
     winner: null,
     startTime: null,
-    elapsedTime: 0
+    elapsedTime: 0,
+    tweaks: {
+        bot1: 'none',
+        bot2: 'none'
+    }
 };
 
 // Canvas and context
@@ -48,6 +52,7 @@ let arenaVertices = [];
 // UI elements
 let bot1HealthEl, bot2HealthEl, bot1PointsEl, bot2PointsEl;
 let gameOverEl, winnerMessageEl, restartBtnEl, gameTimerEl;
+let preGameMenuEl, startGameBtnEl, bot1TweakIndicatorEl, bot2TweakIndicatorEl;
 
 // Vector utility functions
 class Vector2 {
@@ -94,7 +99,7 @@ class Vector2 {
 
 // Bot class
 class Bot {
-    constructor(x, y, color, id) {
+    constructor(x, y, color, id, tweak = 'none') {
         this.position = new Vector2(x, y);
         this.velocity = new Vector2(
             (Math.random() - 0.5) * GAME_CONFIG.bots.speed,
@@ -102,14 +107,20 @@ class Bot {
         );
         this.color = color;
         this.id = id;
-        this.health = GAME_CONFIG.game.maxHealth;
-        this.radius = GAME_CONFIG.bots.radius;
+        this.tweak = tweak;
+        
+        // Apply tweak-specific properties
+        this.health = tweak === 'extra-life' ? 6 : GAME_CONFIG.game.maxHealth;
+        this.maxHealth = this.health;
+        this.radius = tweak === 'smaller' ? GAME_CONFIG.bots.radius * 0.7 : GAME_CONFIG.bots.radius;
+        
         this.angle = Math.random() * Math.PI * 2;
         this.bodyAngle = Math.random() * Math.PI * 2; // Fixed body orientation
         this.lastHitTime = 0;
         this.squashScale = 1;
         this.targetAngle = this.angle;
         this.aiTimer = 0;
+        this.lastRegenTime = 0; // For regeneration tweak
     }
 
     update(deltaTime) {
@@ -143,13 +154,14 @@ class Bot {
         };
     }
 
-    isPointInAchillesHeel(point) {
+    isPointInAchillesHeel(point, attackingRadius = 0) {
         const vectorToPoint = point.subtract(this.position);
         const distance = vectorToPoint.magnitude();
         
-        // Must be close enough to collide (during a collision, bots can be up to 2*radius apart)
-        if (distance > this.radius * 2 + 10) {
-            console.log(`    Distance check failed: ${distance} > ${this.radius * 2 + 10}`);
+        // Must be close enough to collide - use both bot radii for accurate collision detection
+        const maxCollisionDistance = this.radius + attackingRadius + 10; // Small buffer for collision
+        if (distance > maxCollisionDistance) {
+            console.log(`    Distance check failed: ${distance.toFixed(1)} > ${maxCollisionDistance.toFixed(1)} (target:${this.radius.toFixed(1)} + attacker:${attackingRadius.toFixed(1)} + buffer:10)`);
             return false;
         }
         
@@ -301,15 +313,70 @@ function init() {
     winnerMessageEl = document.getElementById('winnerMessage');
     restartBtnEl = document.getElementById('restartBtn');
     gameTimerEl = document.getElementById('gameTimer');
+    preGameMenuEl = document.getElementById('preGameMenu');
+    startGameBtnEl = document.getElementById('startGameBtn');
+    bot1TweakIndicatorEl = document.getElementById('bot1-tweak-indicator');
+    bot2TweakIndicatorEl = document.getElementById('bot2-tweak-indicator');
     
     // Event listeners
-    restartBtnEl.addEventListener('click', startGame);
+    restartBtnEl.addEventListener('click', showPreGameMenu);
+    startGameBtnEl.addEventListener('click', handleStartGame);
     
     // Generate arena vertices (octagon)
     generateArenaVertices();
     
+    // Show pre-game menu initially
+    showPreGameMenu();
+}
+
+function showPreGameMenu() {
+    gameState.running = false;
+    gameState.gameOver = false;
+    preGameMenuEl.style.display = 'block';
+    gameOverEl.style.display = 'none';
+    
+    // Hide game elements when showing pre-game menu
+    document.querySelector('.score-board').style.display = 'none';
+    document.querySelector('#gameCanvas').style.display = 'none';
+    
+    // Reset timer display
+    gameTimerEl.textContent = '00:00';
+    
+    // Clear any existing game state
+    bots = [];
+    particles = [];
+}
+
+function handleStartGame() {
+    // Get selected tweaks
+    const bot1Tweak = document.querySelector('input[name="bot1-tweak"]:checked').value;
+    const bot2Tweak = document.querySelector('input[name="bot2-tweak"]:checked').value;
+    
+    gameState.tweaks.bot1 = bot1Tweak;
+    gameState.tweaks.bot2 = bot2Tweak;
+    
+    // Hide pre-game menu and show game elements
+    preGameMenuEl.style.display = 'none';
+    document.querySelector('.score-board').style.display = 'flex';
+    document.querySelector('#gameCanvas').style.display = 'block';
+    
+    // Update tweak indicators
+    updateTweakIndicators();
+    
     // Start the game
     startGame();
+}
+
+function updateTweakIndicators() {
+    const tweakNames = {
+        'none': '',
+        'smaller': 'SMALL',
+        'regeneration': 'REGEN',
+        'extra-life': 'EXTRA'
+    };
+    
+    bot1TweakIndicatorEl.textContent = tweakNames[gameState.tweaks.bot1];
+    bot2TweakIndicatorEl.textContent = tweakNames[gameState.tweaks.bot2];
 }
 
 function generateArenaVertices() {
@@ -338,11 +405,18 @@ function startGame() {
     // Hide game over screen
     gameOverEl.style.display = 'none';
     
-    // Initialize bots
+    // Initialize bots with their selected tweaks
     bots = [
-        new Bot(300, 250, '#3498db', 0),
-        new Bot(500, 350, '#e74c3c', 1)
+        new Bot(300, 250, '#3498db', 0, gameState.tweaks.bot1),
+        new Bot(500, 350, '#e74c3c', 1, gameState.tweaks.bot2)
     ];
+    
+    // Initialize regeneration timers
+    bots.forEach(bot => {
+        if (bot.tweak === 'regeneration') {
+            bot.lastRegenTime = Date.now();
+        }
+    });
     
     // Debug: Log heel positions for each bot
     bots.forEach((bot, index) => {
@@ -379,6 +453,30 @@ function update() {
     
     // Update bots
     bots.forEach(bot => bot.update(deltaTime));
+    
+    // Check regeneration for bots with regeneration tweak
+    bots.forEach(bot => {
+        if (bot.tweak === 'regeneration' && bot.health < bot.maxHealth) {
+            const timeSinceLastRegen = Date.now() - bot.lastRegenTime;
+            if (timeSinceLastRegen >= 60000) { // 60 seconds = 1 minute
+                bot.health = Math.min(bot.health + 1, bot.maxHealth);
+                bot.lastRegenTime = Date.now();
+                
+                // Create regeneration particles
+                for (let i = 0; i < 10; i++) {
+                    particles.push(new Particle(
+                        bot.position.x,
+                        bot.position.y,
+                        '#00ff88',
+                        Math.random() * Math.PI * 2,
+                        1 + Math.random() * 2
+                    ));
+                }
+                
+                console.log(`Bot ${bot.id} regenerated! Health: ${bot.health}`);
+            }
+        }
+    });
     
     // Check wall collisions
     bots.forEach(bot => checkWallCollision(bot));
@@ -489,7 +587,8 @@ function checkAchillesHeelHit(checkingBot, targetBot, label) {
     console.log(`  Bot${targetBot.id} heel: ${heelStartDegrees.toFixed(1)}° to ${heelEndDegrees.toFixed(1)}°`);
     
     // Check if the checking bot's position is hitting the target bot's achilles heel arc
-    if (targetBot.isPointInAchillesHeel(checkingBot.position)) {
+    // Pass the checking bot's position for the hit detection
+    if (targetBot.isPointInAchillesHeel(checkingBot.position, checkingBot.radius)) {
         console.log(`  🎯 HEEL HIT! Bot${checkingBot.id} hit Bot${targetBot.id}'s heel!`);
         if (targetBot.takeDamage()) {
             console.log(`  ✅ Damage applied! Bot${targetBot.id} health: ${targetBot.health}`);
@@ -528,9 +627,9 @@ function updateUI() {
         gameTimerEl.textContent = formattedTime;
     }
     
-    // Update health bars
-    const bot1HealthPercent = (bots[0].health / GAME_CONFIG.game.maxHealth) * 100;
-    const bot2HealthPercent = (bots[1].health / GAME_CONFIG.game.maxHealth) * 100;
+    // Update health bars (use each bot's max health for proper percentage)
+    const bot1HealthPercent = (bots[0].health / bots[0].maxHealth) * 100;
+    const bot2HealthPercent = (bots[1].health / bots[1].maxHealth) * 100;
     
     bot1HealthEl.style.width = `${bot1HealthPercent}%`;
     bot2HealthEl.style.width = `${bot2HealthPercent}%`;

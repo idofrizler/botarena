@@ -26,6 +26,129 @@ body {
     box-shadow: 0 20px 40px rgba(0, 0, 0, 0.3);
 }
 
+/* Pre-game menu */
+.pre-game-menu {
+    background: rgba(0, 0, 0, 0.9);
+    border-radius: 15px;
+    padding: 30px;
+    margin-bottom: 20px;
+    border: 3px solid #ffd700;
+    box-shadow: 0 0 30px rgba(255, 215, 0, 0.3);
+}
+
+.menu-header {
+    text-align: center;
+    margin-bottom: 30px;
+}
+
+.menu-header h2 {
+    color: #ffd700;
+    font-size: 28px;
+    margin-bottom: 10px;
+    text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.8);
+}
+
+.menu-header p {
+    color: #ccc;
+    font-size: 16px;
+}
+
+.tweaks-selection {
+    display: flex;
+    gap: 40px;
+    justify-content: center;
+    margin-bottom: 30px;
+}
+
+.player-tweaks {
+    flex: 1;
+    max-width: 300px;
+}
+
+.player-tweaks h3 {
+    color: #fff;
+    font-size: 20px;
+    text-align: center;
+    margin-bottom: 20px;
+    text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.8);
+}
+
+.tweak-options {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.tweak-option {
+    display: flex;
+    flex-direction: column;
+    padding: 15px;
+    background: rgba(255, 255, 255, 0.1);
+    border-radius: 10px;
+    border: 2px solid transparent;
+    cursor: pointer;
+    transition: all 0.3s ease;
+}
+
+.tweak-option:hover {
+    background: rgba(255, 255, 255, 0.15);
+    border-color: rgba(255, 215, 0, 0.5);
+}
+
+.tweak-option input[type="radio"] {
+    margin-bottom: 8px;
+    transform: scale(1.2);
+}
+
+.tweak-option input[type="radio"]:checked + .tweak-name {
+    color: #ffd700;
+}
+
+.tweak-option:has(input[type="radio"]:checked) {
+    background: rgba(255, 215, 0, 0.2);
+    border-color: #ffd700;
+}
+
+.tweak-name {
+    font-weight: bold;
+    font-size: 16px;
+    color: #fff;
+    margin-bottom: 5px;
+    transition: color 0.3s ease;
+}
+
+.tweak-desc {
+    font-size: 14px;
+    color: #ccc;
+    line-height: 1.3;
+}
+
+.start-game-btn {
+    display: block;
+    margin: 0 auto;
+    background: linear-gradient(45deg, #27ae60, #2ecc71);
+    color: white;
+    border: none;
+    padding: 15px 40px;
+    font-size: 20px;
+    font-weight: bold;
+    border-radius: 25px;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    font-family: inherit;
+    box-shadow: 0 5px 15px rgba(0, 0, 0, 0.3);
+}
+
+.start-game-btn:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 7px 20px rgba(0, 0, 0, 0.4);
+    background: linear-gradient(45deg, #2ecc71, #27ae60);
+}
+
+.start-game-btn:active {
+    transform: translateY(0);
+}
+
 /* Canvas styling */
 #gameCanvas {
     border-radius: 0 0 15px 15px;
@@ -126,6 +249,15 @@ body {
     text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.8);
     min-width: 30px;
     text-align: center;
+}
+
+.tweak-indicator {
+    font-size: 12px;
+    color: #00ff88;
+    text-align: center;
+    min-height: 16px;
+    font-weight: bold;
+    text-shadow: 1px 1px 2px rgba(0, 0, 0, 0.8);
 }
 
 /* Game over screen */
