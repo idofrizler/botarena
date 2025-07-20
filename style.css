@@ -252,6 +252,14 @@ body {
     text-align: center;
 }
 
+#bot1-points {
+    color: #3498db; /* Blue color for blue bot */
+}
+
+#bot2-points {
+    color: #e74c3c; /* Red color for red bot */
+}
+
 .tweak-indicator {
     font-size: 12px;
     color: #00ff88;
