@@ -605,9 +605,17 @@ function checkAchillesHeelHit(checkingBot, targetBot, label) {
 }
 
 function checkWinCondition() {
-    if (bots[0].health <= 0) {
+    const bot1Dead = bots[0].health <= 0;
+    const bot2Dead = bots[1].health <= 0;
+    
+    if (bot1Dead && bot2Dead) {
+        // Both bots died simultaneously - it's a draw
+        endGame(null);
+    } else if (bot1Dead) {
+        // Bot 1 died, Bot 2 wins
         endGame(1);
-    } else if (bots[1].health <= 0) {
+    } else if (bot2Dead) {
+        // Bot 2 died, Bot 1 wins
         endGame(0);
     }
 }
@@ -617,8 +625,15 @@ function endGame(winnerId) {
     gameState.winner = winnerId;
     gameState.running = false;
     
-    const winnerColor = winnerId === 0 ? 'Blue' : 'Red';
-    winnerMessageEl.textContent = `${winnerColor} Bot Wins!`;
+    if (winnerId === null) {
+        // It's a draw
+        winnerMessageEl.textContent = `It's a Draw!`;
+    } else {
+        // Someone won
+        const winnerColor = winnerId === 0 ? 'Blue' : 'Red';
+        winnerMessageEl.textContent = `${winnerColor} Bot Wins!`;
+    }
+    
     gameOverEl.style.display = 'block';
 }
 
