@@ -160,9 +160,9 @@ const tweakRegistry = new TweakRegistry();
 // AI Tweak Service
 class AITweakService {
     constructor() {
-        // For demo purposes, we'll use a mock AI service
-        // In production, this would connect to Azure AI Foundry
-        this.isDemo = true; // Set to false when Azure integration is ready
+        // Azure AI Foundry integration
+        this.isDemo = false; // Now using real Azure AI!
+        this.apiEndpoint = '/api/generate-tweak';
     }
     
     async generateTweak(description) {
@@ -401,6 +401,7 @@ Available bot properties:
 - health, maxHealth: current and maximum health
 - radius: bot size
 - color: bot color (hex string)
+- heelArcAngle: achilles heel arc size in radians (default: π*0.6, safe range: π/8 to π)
 - lastHitTime: timestamp of last damage taken
 
 Available hooks:
@@ -484,6 +485,7 @@ class Bot {
         this.health = GAME_CONFIG.game.maxHealth;
         this.maxHealth = this.health;
         this.radius = GAME_CONFIG.bots.radius;
+        this.heelArcAngle = GAME_CONFIG.bots.heelArcAngle; // Per-bot heel arc angle
         
         this.angle = Math.random() * Math.PI * 2;
         this.bodyAngle = Math.random() * Math.PI * 2; // Fixed body orientation
@@ -528,7 +530,7 @@ class Bot {
 
     getAchillesHeelArc() {
         const heelAngle = this.bodyAngle + Math.PI; // Fixed position on bot's body
-        const halfArc = GAME_CONFIG.bots.heelArcAngle / 2;
+        const halfArc = this.heelArcAngle / 2;
         return {
             centerAngle: heelAngle,
             startAngle: heelAngle - halfArc,
