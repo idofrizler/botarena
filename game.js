@@ -61,6 +61,370 @@ let bot1HealthEl, bot2HealthEl, bot1PointsEl, bot2PointsEl;
 let gameOverEl, winnerMessageEl, restartBtnEl, gameTimerEl;
 let preGameMenuEl, startGameBtnEl, bot1TweakIndicatorEl, bot2TweakIndicatorEl;
 
+// Tweak Plugin System
+class TweakPlugin {
+    constructor(id, name, description) {
+        this.id = id;
+        this.name = name;
+        this.description = description;
+    }
+    
+    // Lifecycle hooks - to be overridden by specific tweaks
+    onBotInit(bot) {} // Called when bot is created
+    onBotUpdate(bot, deltaTime) {} // Called each frame
+    onBotCollision(bot, otherBot) {} // Called on collision
+    onBotDamage(bot) {} // Called when bot takes damage
+    onBotDraw(bot, ctx) {} // Called during bot draw
+}
+
+// Built-in Tweak Implementations
+class NoTweak extends TweakPlugin {
+    constructor() {
+        super('none', 'No Tweak', 'Standard gameplay');
+    }
+}
+
+class SmallerSizeTweak extends TweakPlugin {
+    constructor() {
+        super('smaller', 'Smaller Size', '30% smaller bot, harder to hit');
+    }
+    
+    onBotInit(bot) {
+        bot.radius = GAME_CONFIG.bots.radius * 0.7;
+    }
+}
+
+class ExtraLifeTweak extends TweakPlugin {
+    constructor() {
+        super('extra-life', 'Extra Life', 'Start with 6 lives instead of 5');
+    }
+    
+    onBotInit(bot) {
+        bot.health = 6;
+        bot.maxHealth = 6;
+    }
+}
+
+class RegenerationTweak extends TweakPlugin {
+    constructor() {
+        super('regeneration', 'Regeneration', 'Gain 1 life every minute');
+    }
+    
+    onBotInit(bot) {
+        bot.lastRegenTime = Date.now();
+    }
+    
+    onBotUpdate(bot, deltaTime) {
+        if (bot.health < bot.maxHealth) {
+            const timeSinceLastRegen = Date.now() - bot.lastRegenTime;
+            if (timeSinceLastRegen >= 60000) { 
+                bot.health = Math.min(bot.health + 1, bot.maxHealth);
+                bot.lastRegenTime = Date.now();
+                createOptimizedParticles(bot.position.x, bot.position.y, '#00ff88', 10);
+                console.log(`Bot ${bot.id} regenerated! Health: ${bot.health}`);
+            }
+        }
+    }
+}
+
+// Tweak Registry
+class TweakRegistry {
+    constructor() {
+        this.tweaks = new Map();
+        this.registerBuiltInTweaks();
+    }
+    
+    registerBuiltInTweaks() {
+        this.register(new NoTweak());
+        this.register(new SmallerSizeTweak());
+        this.register(new ExtraLifeTweak());
+        this.register(new RegenerationTweak());
+    }
+    
+    register(tweak) {
+        this.tweaks.set(tweak.id, tweak);
+    }
+    
+    get(id) {
+        return this.tweaks.get(id) || this.tweaks.get('none');
+    }
+    
+    getAll() {
+        return Array.from(this.tweaks.values());
+    }
+}
+
+// Global tweak registry instance
+const tweakRegistry = new TweakRegistry();
+
+// AI Tweak Service
+class AITweakService {
+    constructor() {
+        // For demo purposes, we'll use a mock AI service
+        // In production, this would connect to Azure AI Foundry
+        this.isDemo = true; // Set to false when Azure integration is ready
+    }
+    
+    async generateTweak(description) {
+        if (this.isDemo) {
+            return this.mockAIGeneration(description);
+        } else {
+            return this.callAzureAI(description);
+        }
+    }
+    
+    async mockAIGeneration(description) {
+        // Simulate AI processing delay
+        await new Promise(resolve => setTimeout(resolve, 2000));
+        
+        // Mock AI responses based on keywords in description
+        const desc = description.toLowerCase();
+        
+        if (desc.includes('fast') || desc.includes('speed')) {
+            return this.generateSpeedTweak(description);
+        } else if (desc.includes('big') || desc.includes('large') || desc.includes('grow')) {
+            return this.generateSizeTweak(description);
+        } else if (desc.includes('invisible') || desc.includes('ghost')) {
+            return this.generateInvisibilityTweak(description);
+        } else if (desc.includes('trail') || desc.includes('particle')) {
+            return this.generateTrailTweak(description);
+        } else if (desc.includes('bounce') || desc.includes('elastic')) {
+            return this.generateBounceTweak(description);
+        } else {
+            // Default creative tweak
+            return this.generateDefaultTweak(description);
+        }
+    }
+    
+    generateSpeedTweak(description) {
+        return {
+            name: 'AI Speed Boost',
+            description: 'Generated: Speed increases when health is low',
+            code: `
+class AISpeedTweak extends TweakPlugin {
+    constructor() {
+        super('ai-speed-${Date.now()}', 'AI Speed Boost', 'Speed increases when health is low');
+    }
+    
+    onBotUpdate(bot, deltaTime) {
+        const healthRatio = bot.health / bot.maxHealth;
+        if (healthRatio < 0.6) {
+            const speedMultiplier = 1 + (1 - healthRatio) * 0.8;
+            const currentSpeed = bot.velocity.magnitude();
+            if (currentSpeed > 0.1) {
+                // Apply speed boost by scaling velocity
+                const targetSpeed = Math.min(GAME_CONFIG.bots.maxSpeed * speedMultiplier, GAME_CONFIG.bots.maxSpeed * 1.8);
+                bot.velocity = bot.velocity.normalize().multiply(targetSpeed);
+            }
+        }
+    }
+}
+return new AISpeedTweak();`
+        };
+    }
+    
+    generateSizeTweak(description) {
+        return {
+            name: 'AI Size Morph',
+            description: 'Generated: Bot grows bigger when hitting opponents',
+            code: `
+class AISizeTweak extends TweakPlugin {
+    constructor() {
+        super('ai-size-${Date.now()}', 'AI Size Morph', 'Bot grows bigger when hitting opponents');
+    }
+    
+    onBotInit(bot) {
+        bot.originalRadius = bot.radius;
+        bot.growthLevel = 0;
+    }
+    
+    onBotCollision(bot, otherBot) {
+        if (bot.growthLevel < 3) {
+            bot.growthLevel++;
+            bot.radius = bot.originalRadius * (1 + bot.growthLevel * 0.15);
+        }
+    }
+}
+return new AISizeTweak();`
+        };
+    }
+    
+    generateInvisibilityTweak(description) {
+        return {
+            name: 'AI Stealth Mode',
+            description: 'Generated: Becomes invisible and unhittable for 10 seconds after taking damage',
+            code: `
+class AIStealthTweak extends TweakPlugin {
+    constructor() {
+        super('ai-stealth-${Date.now()}', 'AI Stealth Mode', 'Becomes invisible and unhittable for 10 seconds after taking damage');
+    }
+    
+    onBotDamage(bot) {
+        bot.stealthMode = true;
+        bot.stealthEndTime = Date.now() + 10000; // 10 seconds
+        console.log('Bot entered stealth mode for 10 seconds');
+    }
+    
+    onBotUpdate(bot, deltaTime) {
+        if (bot.stealthMode && Date.now() > bot.stealthEndTime) {
+            bot.stealthMode = false;
+            console.log('Bot exited stealth mode');
+        }
+    }
+    
+    onBotDraw(bot, ctx) {
+        if (bot.stealthMode) {
+            ctx.globalAlpha *= 0.15; // Make bot very transparent (almost invisible)
+        }
+    }
+    
+    // Custom method to check if bot can be hit
+    isInvisible(bot) {
+        return bot.stealthMode;
+    }
+}
+return new AIStealthTweak();`
+        };
+    }
+    
+    generateTrailTweak(description) {
+        return {
+            name: 'AI Particle Trail',
+            description: 'Generated: Leaves a colorful particle trail',
+            code: `
+class AITrailTweak extends TweakPlugin {
+    constructor() {
+        super('ai-trail-${Date.now()}', 'AI Particle Trail', 'Leaves a colorful particle trail');
+    }
+    
+    onBotUpdate(bot, deltaTime) {
+        if (Math.random() < 0.3) {
+            const colors = ['#ff6b6b', '#4ecdc4', '#45b7d1', '#96ceb4', '#ffeaa7'];
+            const color = colors[Math.floor(Math.random() * colors.length)];
+            createOptimizedParticles(bot.position.x, bot.position.y, color, 2);
+        }
+    }
+}
+return new AITrailTweak();`
+        };
+    }
+    
+    generateBounceTweak(description) {
+        return {
+            name: 'AI Super Bounce',
+            description: 'Generated: Bounces with extra force off walls',
+            code: `
+class AIBounceTweak extends TweakPlugin {
+    constructor() {
+        super('ai-bounce-${Date.now()}', 'AI Super Bounce', 'Bounces with extra force off walls');
+    }
+    
+    onBotUpdate(bot, deltaTime) {
+        // Check if bot just bounced (velocity changed significantly)
+        if (bot.lastVelocity) {
+            const velocityChange = bot.velocity.subtract(bot.lastVelocity).magnitude();
+            if (velocityChange > 5) {
+                // Apply bounce boost
+                const boostFactor = 1.3;
+                bot.velocity = bot.velocity.multiply(boostFactor);
+            }
+        }
+        bot.lastVelocity = new Vector2(bot.velocity.x, bot.velocity.y);
+    }
+}
+return new AIBounceTweak();`
+        };
+    }
+    
+    generateDefaultTweak(description) {
+        return {
+            name: 'AI Color Shift',
+            description: 'Generated: Changes color based on health',
+            code: `
+class AIColorTweak extends TweakPlugin {
+    constructor() {
+        super('ai-color-${Date.now()}', 'AI Color Shift', 'Changes color based on health');
+    }
+    
+    onBotInit(bot) {
+        bot.originalColor = bot.color;
+    }
+    
+    onBotUpdate(bot, deltaTime) {
+        const healthRatio = bot.health / bot.maxHealth;
+        if (healthRatio < 0.3) {
+            bot.color = '#ff4757'; // Red when very low health
+        } else if (healthRatio < 0.6) {
+            bot.color = '#ffa502'; // Orange when medium health
+        } else {
+            bot.color = bot.originalColor; // Original color when healthy
+        }
+    }
+}
+return new AIColorTweak();`
+        };
+    }
+    
+    async callAzureAI(description) {
+        // TODO: Implement Azure AI Foundry integration
+        const prompt = this.buildPrompt(description);
+        
+        try {
+            const response = await fetch('/api/generate-tweak', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({ prompt })
+            });
+            
+            const data = await response.json();
+            return {
+                name: data.name,
+                description: data.description,
+                code: data.code
+            };
+        } catch (error) {
+            console.error('AI service error:', error);
+            throw new Error('Failed to generate tweak. Please try again.');
+        }
+    }
+    
+    buildPrompt(description) {
+        return `
+Generate a JavaScript class that extends TweakPlugin for a bumper bot game.
+The user wants: "${description}"
+
+Available bot properties:
+- position (Vector2): bot's x,y position
+- velocity (Vector2): bot's movement vector
+- health, maxHealth: current and maximum health
+- radius: bot size
+- color: bot color (hex string)
+- lastHitTime: timestamp of last damage taken
+
+Available hooks:
+- onBotInit(bot): Called when bot is created
+- onBotUpdate(bot, deltaTime): Called each frame (60fps)
+- onBotCollision(bot, otherBot): Called when bots collide
+- onBotDamage(bot): Called when bot takes damage
+- onBotDraw(bot, ctx): Called during rendering
+
+Available utilities:
+- Vector2 class with add, subtract, multiply, normalize methods
+- createOptimizedParticles(x, y, color, count) for effects
+- GAME_CONFIG constants for game settings
+
+Return only a JavaScript class that extends TweakPlugin with a unique id.
+Make the tweak fun, balanced, and visually interesting.
+End with: return new YourTweakClass();
+        `;
+    }
+}
+
+// Global AI service instance
+const aiTweakService = new AITweakService();
+
 // Vector utility functions
 class Vector2 {
     constructor(x = 0, y = 0) {
@@ -106,7 +470,7 @@ class Vector2 {
 
 // Bot class
 class Bot {
-    constructor(x, y, color, id, tweak = 'none') {
+    constructor(x, y, color, id, tweakId = 'none') {
         this.position = new Vector2(x, y);
         this.velocity = new Vector2(
             (Math.random() - 0.5) * GAME_CONFIG.bots.speed,
@@ -114,12 +478,12 @@ class Bot {
         );
         this.color = color;
         this.id = id;
-        this.tweak = tweak;
+        this.tweakId = tweakId;
         
-        // Apply tweak-specific properties
-        this.health = tweak === 'extra-life' ? 6 : GAME_CONFIG.game.maxHealth;
+        // Initialize default properties
+        this.health = GAME_CONFIG.game.maxHealth;
         this.maxHealth = this.health;
-        this.radius = tweak === 'smaller' ? GAME_CONFIG.bots.radius * 0.7 : GAME_CONFIG.bots.radius;
+        this.radius = GAME_CONFIG.bots.radius;
         
         this.angle = Math.random() * Math.PI * 2;
         this.bodyAngle = Math.random() * Math.PI * 2; // Fixed body orientation
@@ -127,7 +491,12 @@ class Bot {
         this.squashScale = 1;
         this.targetAngle = this.angle;
         this.aiTimer = 0;
-        this.lastRegenTime = 0; // For regeneration tweak
+        
+        // Get and store the tweak plugin
+        this.tweakPlugin = tweakRegistry.get(tweakId);
+        
+        // Apply tweak initialization
+        this.tweakPlugin.onBotInit(this);
     }
 
     update(deltaTime) {
@@ -152,6 +521,9 @@ class Bot {
         
         // Rotate the achilles heel continuously
         this.bodyAngle += 0.02; // Slow rotation speed
+        
+        // Call tweak update hook
+        this.tweakPlugin.onBotUpdate(this, deltaTime);
     }
 
     getAchillesHeelArc() {
@@ -217,6 +589,9 @@ class Bot {
         // Create hit particles
         this.createHitParticles();
         
+        // Call tweak damage hook
+        this.tweakPlugin.onBotDamage(this);
+        
         return true;
     }
 
@@ -232,12 +607,19 @@ class Bot {
         ctx.save();
         
         // Invulnerability flashing effect
+        let baseAlpha = 1.0;
         if (this.isInvulnerable()) {
             const flash = Math.sin(Date.now() * 0.02) > 0;
             if (flash) {
-                ctx.globalAlpha = 0.5;
+                baseAlpha = 0.5;
             }
         }
+        
+        // Call tweak draw hook BEFORE drawing (for transparency effects)
+        this.tweakPlugin.onBotDraw(this, ctx);
+        
+        // Apply any alpha modifications from tweaks
+        ctx.globalAlpha *= baseAlpha;
 
         // Draw bot body with squash effect
         ctx.translate(this.position.x, this.position.y);
@@ -256,13 +638,19 @@ class Bot {
 
         ctx.restore();
 
-        // Draw achilles heel as an arc on the bot's surface
+        // Draw achilles heel as an arc on the bot's surface (with same alpha)
+        ctx.save();
+        this.tweakPlugin.onBotDraw(this, ctx);
+        ctx.globalAlpha *= baseAlpha;
+        
         const heel = this.getAchillesHeelArc();
         ctx.beginPath();
         ctx.arc(this.position.x, this.position.y, this.radius, heel.startAngle, heel.endAngle);
         ctx.strokeStyle = this.isInvulnerable() ? '#ffaa00' : '#00ff00';
         ctx.lineWidth = 6;
         ctx.stroke();
+        
+        ctx.restore();
     }
 }
 
@@ -322,7 +710,7 @@ function init() {
     
     // Event listeners
     restartBtnEl.addEventListener('click', showPreGameMenu);
-    startGameBtnEl.addEventListener('click', handleStartGame);
+    startGameBtnEl.addEventListener('click', handleStartGameWithAI);
     
     // Generate arena vertices (octagon)
     generateArenaVertices();
@@ -413,12 +801,6 @@ function startGame() {
         new Bot(500, 350, '#e74c3c', 1, gameState.tweaks.bot2)
     ];
     
-    // Initialize regeneration timers
-    bots.forEach(bot => {
-        if (bot.tweak === 'regeneration') {
-            bot.lastRegenTime = Date.now();
-        }
-    });
     
     // Debug: Log heel positions for each bot
     bots.forEach((bot, index) => {
@@ -453,24 +835,8 @@ function update() {
     
     const deltaTime = 16; // Assume 60fps
     
-    // Update bots
+    // Update bots (plugins handle their own logic via onBotUpdate)
     bots.forEach(bot => bot.update(deltaTime));
-    
-    // Check regeneration for bots with regeneration tweak
-    bots.forEach(bot => {
-        if (bot.tweak === 'regeneration' && bot.health < bot.maxHealth) {
-            const timeSinceLastRegen = Date.now() - bot.lastRegenTime;
-            if (timeSinceLastRegen >= 60000) { // 60 seconds = 1 minute
-                bot.health = Math.min(bot.health + 1, bot.maxHealth);
-                bot.lastRegenTime = Date.now();
-                
-                // Create regeneration particles
-                createOptimizedParticles(bot.position.x, bot.position.y, '#00ff88', 10);
-                
-                console.log(`Bot ${bot.id} regenerated! Health: ${bot.health}`);
-            }
-        }
-    });
     
     // Check wall collisions
     bots.forEach(bot => checkWallCollision(bot));
@@ -558,6 +924,10 @@ function checkBotCollisions() {
         bot1.squashScale = 0.8;
         bot2.squashScale = 0.8;
         
+        // Call tweak collision hooks
+        bot1.tweakPlugin.onBotCollision(bot1, bot2);
+        bot2.tweakPlugin.onBotCollision(bot2, bot1);
+        
         // Check achilles heel hits for both bots simultaneously
         console.log('=== COLLISION DETECTED ===');
         checkAchillesHeelHit(bot1, bot2, 'Bot1->Bot2');
@@ -567,6 +937,12 @@ function checkBotCollisions() {
 }
 
 function checkAchillesHeelHit(checkingBot, targetBot, label) {
+    // Check if target bot is in stealth mode (invisible/unhittable)
+    if (targetBot.stealthMode) {
+        console.log(`${label}: Bot${targetBot.id} is in stealth mode - cannot be hit!`);
+        return;
+    }
+    
     // Get collision angle for debugging
     const vectorToChecker = checkingBot.position.subtract(targetBot.position);
     const angleToChecker = Math.atan2(vectorToChecker.y, vectorToChecker.x);
@@ -799,8 +1175,252 @@ function createOptimizedParticles(x, y, color, count, angle = null, speed = null
     }
 }
 
+// AI Tweak Interface Handlers
+let aiTweaks = {
+    bot1: null,
+    bot2: null
+};
+
+function initAIInterface() {
+    // Show/hide AI overlays when AI custom tweak is selected
+    document.addEventListener('change', (e) => {
+        if (e.target.name === 'bot1-tweak' || e.target.name === 'bot2-tweak') {
+            handleTweakSelection(e);
+        }
+    });
+    
+    // Bot 1 AI overlay handlers
+    const generateBot1Btn = document.getElementById('generateBot1Btn');
+    generateBot1Btn.addEventListener('click', () => generateBotTweak('bot1'));
+    
+    // Bot 2 AI overlay handlers
+    const generateBot2Btn = document.getElementById('generateBot2Btn');
+    generateBot2Btn.addEventListener('click', () => generateBotTweak('bot2'));
+}
+
+function handleTweakSelection(e) {
+    const botNumber = e.target.name === 'bot1-tweak' ? 'bot1' : 'bot2';
+    const selectedValue = e.target.value;
+    
+    if (selectedValue === 'ai-custom') {
+        // Show overlay for this bot
+        showBotAIOverlay(botNumber);
+    } else {
+        // Clear any existing AI tweak for this bot
+        aiTweaks[botNumber] = null;
+    }
+}
+
+function showBotAIOverlay(botNumber) {
+    const overlayId = `${botNumber}AiOverlay`;
+    const overlay = document.getElementById(overlayId);
+    if (overlay) {
+        overlay.style.display = 'flex';
+        
+        // Clear any previous status
+        const statusElement = document.getElementById(`${botNumber}AiStatus`);
+        if (statusElement) {
+            statusElement.textContent = '';
+        }
+        
+        // Focus on input
+        const inputElement = document.getElementById(`${botNumber}AiInput`);
+        if (inputElement) {
+            setTimeout(() => inputElement.focus(), 100);
+        }
+    }
+}
+
+function closeBotAIOverlay(botNumber) {
+    const overlayId = `${botNumber}AiOverlay`;
+    const overlay = document.getElementById(overlayId);
+    if (overlay) {
+        overlay.style.display = 'none';
+        
+        // If no tweak was generated, revert selection to "none"
+        if (!aiTweaks[botNumber]) {
+            const radioButton = document.querySelector(`input[name="${botNumber}-tweak"][value="none"]`);
+            if (radioButton) {
+                radioButton.checked = true;
+            }
+        }
+    }
+}
+
+async function generateBotTweak(botNumber) {
+    const inputElement = document.getElementById(`${botNumber}AiInput`);
+    const generateBtn = document.getElementById(`generateBot${botNumber === 'bot1' ? '1' : '2'}Btn`);
+    const statusElement = document.getElementById(`${botNumber}AiStatus`);
+    
+    const description = inputElement.value.trim();
+    
+    if (!description) {
+        statusElement.textContent = 'Please describe your tweak first!';
+        statusElement.style.color = '#ff6b6b';
+        return;
+    }
+    
+    // Disable button and show loading
+    generateBtn.disabled = true;
+    generateBtn.querySelector('.btn-text').style.display = 'none';
+    generateBtn.querySelector('.btn-loading').style.display = 'inline';
+    statusElement.textContent = `AI is creating your custom tweak...`;
+    statusElement.style.color = '#00ff88';
+    
+    try {
+        const tweakData = await aiTweakService.generateTweak(description);
+        
+        // Execute the generated code to create the tweak plugin
+        const tweakPlugin = executeAITweakCode(tweakData.code);
+        
+        // Register the new tweak
+        tweakRegistry.register(tweakPlugin);
+        
+        // Store the tweak for the appropriate bot
+        aiTweaks[botNumber] = tweakPlugin;
+        
+        // Update status and clear input
+        statusElement.textContent = `✅ Tweak Generated: ${tweakPlugin.name}`;
+        statusElement.style.color = '#00ff88';
+        inputElement.value = '';
+        
+        console.log(`AI Tweak Generated for ${botNumber}:`, tweakPlugin);
+        
+        // Close overlay after success
+        setTimeout(() => {
+            closeBotAIOverlay(botNumber);
+        }, 1500);
+        
+    } catch (error) {
+        console.error('Failed to generate AI tweak:', error);
+        statusElement.textContent = '❌ Failed to generate tweak. Please try again.';
+        statusElement.style.color = '#ff6b6b';
+    } finally {
+        // Re-enable button
+        generateBtn.disabled = false;
+        generateBtn.querySelector('.btn-text').style.display = 'inline';
+        generateBtn.querySelector('.btn-loading').style.display = 'none';
+    }
+}
+
+// Make closeBotAIOverlay globally available for onclick handlers
+window.closeBotAIOverlay = closeBotAIOverlay;
+
+function executeAITweakCode(code) {
+    try {
+        // Create a safe execution context
+        const func = new Function(
+            'TweakPlugin',
+            'GAME_CONFIG', 
+            'createOptimizedParticles',
+            'Vector2',
+            'Date',
+            'Math',
+            'console',
+            code
+        );
+        
+        // Execute the code with safe globals
+        const tweakPlugin = func(
+            TweakPlugin,
+            GAME_CONFIG,
+            createOptimizedParticles,
+            Vector2,
+            Date,
+            Math,
+            console
+        );
+        
+        if (!tweakPlugin || !(tweakPlugin instanceof TweakPlugin)) {
+            throw new Error('Generated code did not return a valid TweakPlugin instance');
+        }
+        
+        return tweakPlugin;
+        
+    } catch (error) {
+        console.error('Error executing AI tweak code:', error);
+        throw new Error('Invalid tweak code generated. Please try a different description.');
+    }
+}
+
+// Update the handleStartGame function to handle AI tweaks
+function handleStartGameWithAI() {
+    // Check if we need to validate AI tweaks first
+    const bot1Tweak = document.querySelector('input[name="bot1-tweak"]:checked').value;
+    const bot2Tweak = document.querySelector('input[name="bot2-tweak"]:checked').value;
+    
+    // Check if AI tweaks are needed but not generated
+    if (bot1Tweak === 'ai-custom' && !aiTweaks.bot1) {
+        const aiStatus = document.getElementById('aiStatus');
+        aiStatus.textContent = '❌ Please generate Bot 1 AI tweak first!';
+        aiStatus.style.color = '#ff6b6b';
+        return;
+    }
+    
+    if (bot2Tweak === 'ai-custom' && !aiTweaks.bot2) {
+        const aiStatus = document.getElementById('aiStatus');
+        aiStatus.textContent = '❌ Please generate Bot 2 AI tweak first!';
+        aiStatus.style.color = '#ff6b6b';
+        return;
+    }
+    
+    // Replace ai-custom with the actual AI tweak IDs
+    if (bot1Tweak === 'ai-custom') {
+        gameState.tweaks.bot1 = aiTweaks.bot1.id;
+    } else {
+        gameState.tweaks.bot1 = bot1Tweak;
+    }
+    
+    if (bot2Tweak === 'ai-custom') {
+        gameState.tweaks.bot2 = aiTweaks.bot2.id;
+    } else {
+        gameState.tweaks.bot2 = bot2Tweak;
+    }
+    
+    // Hide pre-game menu and show game elements
+    preGameMenuEl.style.display = 'none';
+    document.querySelector('.score-board').style.display = 'flex';
+    document.querySelector('#gameCanvas').style.display = 'block';
+    
+    // Update tweak indicators
+    updateTweakIndicatorsWithAI();
+    
+    // Start the game
+    startGame();
+}
+
+function updateTweakIndicatorsWithAI() {
+    const tweakNames = {
+        'none': '',
+        'smaller': 'SMALL',
+        'regeneration': 'REGEN',
+        'extra-life': 'EXTRA'
+    };
+    
+    // Handle AI tweak display
+    const bot1TweakId = gameState.tweaks.bot1;
+    const bot2TweakId = gameState.tweaks.bot2;
+    
+    // Get display name for bot 1
+    if (bot1TweakId.startsWith('ai-')) {
+        const aiTweak = tweakRegistry.get(bot1TweakId);
+        bot1TweakIndicatorEl.textContent = aiTweak ? 'AI' : '';
+    } else {
+        bot1TweakIndicatorEl.textContent = tweakNames[bot1TweakId] || '';
+    }
+    
+    // Get display name for bot 2
+    if (bot2TweakId.startsWith('ai-')) {
+        const aiTweak = tweakRegistry.get(bot2TweakId);
+        bot2TweakIndicatorEl.textContent = aiTweak ? 'AI' : '';
+    } else {
+        bot2TweakIndicatorEl.textContent = tweakNames[bot2TweakId] || '';
+    }
+}
+
 // Initialize when page loads
 window.addEventListener('load', () => {
     detectMobile();
     init();
+    initAIInterface();
 });

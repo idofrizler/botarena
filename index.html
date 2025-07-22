@@ -44,6 +44,11 @@
                             <span class="tweak-name">Extra Life</span>
                             <span class="tweak-desc">Start with 6 lives instead of 5</span>
                         </label>
+                        <label class="tweak-option">
+                            <input type="radio" name="bot1-tweak" value="ai-custom">
+                            <span class="tweak-name">AI Custom Tweak</span>
+                            <span class="tweak-desc">Create your own tweak with AI</span>
+                        </label>
                     </div>
                 </div>
                 <div class="player-tweaks">
@@ -69,9 +74,16 @@
                             <span class="tweak-name">Extra Life</span>
                             <span class="tweak-desc">Start with 6 lives instead of 5</span>
                         </label>
+                        <label class="tweak-option">
+                            <input type="radio" name="bot2-tweak" value="ai-custom">
+                            <span class="tweak-name">AI Custom Tweak</span>
+                            <span class="tweak-desc">Create your own tweak with AI</span>
+                        </label>
                     </div>
                 </div>
             </div>
+            
+            
             <button class="start-game-btn" id="startGameBtn">START GAME</button>
         </div>
 
@@ -109,6 +121,58 @@
     <div class="instructions">
         <p>Watch the bots battle! Hit the opponent's <strong>achilles heel</strong> to score points!</p>
         <p>First bot to lose all 5 points loses the match!</p>
+    </div>
+    
+    <!-- Bot 1 AI Tweak Overlay -->
+    <div class="ai-overlay" id="bot1AiOverlay" style="display: none;">
+        <div class="ai-modal">
+            <div class="ai-modal-header">
+                <h3>🤖 Bot 1 (Blue) - AI Tweak Generator</h3>
+                <button class="close-btn" onclick="closeBotAIOverlay('bot1')">&times;</button>
+            </div>
+            <div class="ai-modal-content">
+                <p>Describe what you want Bot 1 to do and AI will create custom code!</p>
+                <textarea id="bot1AiInput" placeholder="e.g., 'make my bot invisible when hit' or 'bot gets faster when health is low'"></textarea>
+                <div class="ai-examples">
+                    <strong>Try these:</strong>
+                    <span class="example" onclick="document.getElementById('bot1AiInput').value='make my bot invisible when hit'">invisible when hit</span>
+                    <span class="example" onclick="document.getElementById('bot1AiInput').value='bot gets faster when health is low'">speed boost</span>
+                    <span class="example" onclick="document.getElementById('bot1AiInput').value='bot grows bigger when hitting'">grow when hitting</span>
+                    <span class="example" onclick="document.getElementById('bot1AiInput').value='colorful particle trail'">particle trail</span>
+                </div>
+                <button id="generateBot1Btn" class="generate-btn">
+                    <span class="btn-text">✨ Generate AI Tweak</span>
+                    <span class="btn-loading" style="display: none;">🔄 Generating...</span>
+                </button>
+                <div id="bot1AiStatus" class="ai-status"></div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Bot 2 AI Tweak Overlay -->
+    <div class="ai-overlay" id="bot2AiOverlay" style="display: none;">
+        <div class="ai-modal">
+            <div class="ai-modal-header">
+                <h3>🤖 Bot 2 (Red) - AI Tweak Generator</h3>
+                <button class="close-btn" onclick="closeBotAIOverlay('bot2')">&times;</button>
+            </div>
+            <div class="ai-modal-content">
+                <p>Describe what you want Bot 2 to do and AI will create custom code!</p>
+                <textarea id="bot2AiInput" placeholder="e.g., 'make my bot invisible when hit' or 'bot gets faster when health is low'"></textarea>
+                <div class="ai-examples">
+                    <strong>Try these:</strong>
+                    <span class="example" onclick="document.getElementById('bot2AiInput').value='make my bot invisible when hit'">invisible when hit</span>
+                    <span class="example" onclick="document.getElementById('bot2AiInput').value='bot gets faster when health is low'">speed boost</span>
+                    <span class="example" onclick="document.getElementById('bot2AiInput').value='bot grows bigger when hitting'">grow when hitting</span>
+                    <span class="example" onclick="document.getElementById('bot2AiInput').value='colorful particle trail'">particle trail</span>
+                </div>
+                <button id="generateBot2Btn" class="generate-btn">
+                    <span class="btn-text">✨ Generate AI Tweak</span>
+                    <span class="btn-loading" style="display: none;">🔄 Generating...</span>
+                </button>
+                <div id="bot2AiStatus" class="ai-status"></div>
+            </div>
+        </div>
     </div>
     
     <script src="game.js"></script>
