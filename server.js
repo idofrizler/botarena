@@ -6,6 +6,9 @@ require('dotenv').config();
 // Azure OpenAI client setup
 const { AzureOpenAI } = require('openai');
 
+// Import AI validation system
+const { AICodeValidator } = require('./ai-validation.js');
+
 const client = new AzureOpenAI({
     endpoint: process.env.AZURE_OPENAI_ENDPOINT,
     apiKey: process.env.AZURE_OPENAI_API_KEY,
@@ -142,6 +145,29 @@ Rules:
         console.log(`📝 [${requestId}] =================================`);
         console.log(`📝 [${requestId}] Generated Code Length: ${generatedCode.length} characters`);
         
+        // Validate the generated code against user request
+        const validator = new AICodeValidator();
+        const validation = validator.validateCode(prompt, generatedCode);
+        
+        console.log(`\n🔍 [${requestId}] =================================`);
+        console.log(`🔍 [${requestId}] CODE VALIDATION ANALYSIS`);
+        console.log(`🔍 [${requestId}] =================================`);
+        console.log(`📊 [${requestId}] Validation Score: ${(validation.score * 100).toFixed(1)}%`);
+        console.log(`✅ [${requestId}] Code Alignment: ${validation.isValid ? 'VALID' : 'NEEDS REVIEW'}`);
+        console.log(`🎯 [${requestId}] User Intents: ${validation.userIntent.intents.map(i => i.type).join(', ')}`);
+        console.log(`⚙️ [${requestId}] Code Features: ${validation.codeFeatures.map(f => f.type).join(', ')}`);
+        
+        if (validation.suggestions.length > 0) {
+            console.log(`💡 [${requestId}] Suggestions:`);
+            validation.suggestions.forEach((suggestion, index) => {
+                console.log(`   ${index + 1}. ${suggestion.message}`);
+                console.log(`      Fix: ${suggestion.fix}`);
+            });
+        } else {
+            console.log(`✨ [${requestId}] No issues found - code looks good!`);
+        }
+        console.log(`🔍 [${requestId}] =================================\n`);
+        
         // Extract name and description from the code for response
         const nameMatch = generatedCode.match(/super\('([^']+)'/);
         const descMatch = generatedCode.match(/'([^']+)', '([^']+)'/);
@@ -155,7 +181,14 @@ Rules:
         const responseData = {
             name: tweakName,
             description: tweakDescription,
-            code: generatedCode
+            code: generatedCode,
+            validation: {
+                score: validation.score,
+                isValid: validation.isValid,
+                suggestions: validation.suggestions,
+                userIntent: validation.userIntent,
+                codeFeatures: validation.codeFeatures
+            }
         };
 
         console.log(`📤 [${requestId}] Sending response to frontend`);
