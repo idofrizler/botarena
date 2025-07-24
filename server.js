@@ -9,11 +9,100 @@ const { AzureOpenAI } = require('openai');
 // Import AI validation system
 const { AICodeValidator } = require('./ai-validation.js');
 
+// AI Code Critique Function
+async function getCritiqueFromAI(requestId, userRequest, generatedCode) {
+    try {
+        console.log(`🧠 [${requestId}] Sending code to o4-mini for critique...`);
+        
+        const critiquePrompt = `You are a code reviewer for a 2D bumper bot game. Review this AI-generated code and provide a clear verdict.
+
+USER REQUEST: "${userRequest}"
+
+GENERATED CODE:
+\`\`\`javascript
+${generatedCode}
+\`\`\`
+
+CONTEXT: Bots bounce around an arena trying to hit each other's rotating "achilles heel" (green arc). Game runs at 60fps with momentum-based physics.
+
+Provide your response in this EXACT format:
+
+VERDICT: [Looks good/Try again]
+
+REASONING: [1-2 sentences explaining why the code works or doesn't work for the user's request]
+
+If verdict is "TRY AGAIN", also include:
+IMPROVE YOUR PROMPT: [Specific suggestions for how the user should rephrase their request to get better results. Focus on being more specific, mentioning game mechanics, or clarifying the desired behavior.]
+
+Keep it concise and actionable.`;
+
+        const critiqueResponse = await critiqueClient.chat.completions.create({
+            model: "o4-mini",
+            messages: [
+                {
+                    role: "system",
+                    content: "You are a senior code reviewer. Provide clear, structured feedback."
+                },
+                {
+                    role: "user",
+                    content: critiquePrompt
+                }
+            ],
+            max_completion_tokens: 4000  // Generous limit for detailed critiques
+        });
+
+        console.log(`🧠 [${requestId}] Raw critique response:`, JSON.stringify(critiqueResponse, null, 2));
+        
+        const critiqueText = critiqueResponse.choices[0]?.message?.content?.trim() || '';
+        console.log(`🧠 [${requestId}] o4-mini critique received (length: ${critiqueText.length}):`, critiqueText);
+        
+        // If empty response, provide a helpful fallback
+        if (!critiqueText || critiqueText.length === 0) {
+            console.log(`⚠️  [${requestId}] Empty critique received, using fallback`);
+            return {
+                rawText: "AI code review is temporarily unavailable. The generated code appears syntactically correct and should be safe to test.",
+                isRawText: true,
+                fallback: true
+            };
+        }
+        
+        // Return the raw text as-is, no parsing
+        return {
+            rawText: critiqueText,
+            isRawText: true
+        };
+        
+    } catch (error) {
+        console.error(`❌ [${requestId}] Error getting AI critique:`, error.message);
+        return {
+            rawText: "AI critique unavailable due to technical error: " + error.message,
+            isRawText: true,
+            error: error.message
+        };
+    }
+}
+
+// Main generation client (GPT-4.1)
 const client = new AzureOpenAI({
     endpoint: process.env.AZURE_OPENAI_ENDPOINT,
     apiKey: process.env.AZURE_OPENAI_API_KEY,
     deployment: "gpt-4.1",
     apiVersion: "2024-04-01-preview"
+});
+
+// Critique client (o4-mini)
+const critiqueClient = new AzureOpenAI({
+    endpoint: process.env.AZURE_CRITIQUE_ENDPOINT || process.env.AZURE_OPENAI_ENDPOINT,
+    apiKey: process.env.AZURE_CRITIQUE_API_KEY || process.env.AZURE_OPENAI_API_KEY,
+    deployment: process.env.AZURE_CRITIQUE_DEPLOYMENT || "o4-mini",
+    apiVersion: process.env.AZURE_CRITIQUE_API_VERSION || "2024-04-01-preview"
+});
+
+console.log(`🔧 Critique client config:`, {
+    endpoint: process.env.AZURE_CRITIQUE_ENDPOINT || process.env.AZURE_OPENAI_ENDPOINT,
+    deployment: process.env.AZURE_CRITIQUE_DEPLOYMENT || "o4-mini",
+    apiVersion: process.env.AZURE_CRITIQUE_API_VERSION || "2024-04-01-preview",
+    hasApiKey: !!(process.env.AZURE_CRITIQUE_API_KEY || process.env.AZURE_OPENAI_API_KEY)
 });
 
 const app = express();
@@ -84,10 +173,16 @@ Available bot properties:
 - squashScale: animation scale factor
 
 Available utilities:
-- Vector2 class with add, subtract, multiply, normalize methods
+- Vector2 class with add, subtract, multiply, normalize, magnitude methods
 - createOptimizedParticles(x, y, color, count) for effects
 - GAME_CONFIG constants for game settings
 - Date, Math, console objects
+
+CRITICAL VECTOR2 API:
+- To get speed: bot.velocity.magnitude() (NOT .length())
+- To normalize: bot.velocity.normalize()
+- To multiply: bot.velocity.multiply(scalar)
+- Example speed boost: bot.velocity = bot.velocity.normalize().multiply(newSpeed)
 
 Rules:
 1. Create a class that extends TweakPlugin
@@ -97,7 +192,8 @@ Rules:
 5. DO NOT modify GAME_CONFIG values
 6. Make tweaks fun but balanced
 7. End with: return new YourTweakClass();
-8. NO markdown, NO explanations, ONLY JavaScript code`;
+8. NO markdown, NO explanations, ONLY JavaScript code
+9. ALWAYS use bot.velocity.magnitude() to get speed (NOT .length())`;
 
         const messages = [
             {
@@ -145,28 +241,46 @@ Rules:
         console.log(`📝 [${requestId}] =================================`);
         console.log(`📝 [${requestId}] Generated Code Length: ${generatedCode.length} characters`);
         
-        // Validate the generated code against user request
+        // Basic code compilation check
+        let compilationError = null;
+        try {
+            // Try to create the function to check for syntax errors
+            new Function(
+                'TweakPlugin',
+                'GAME_CONFIG', 
+                'createOptimizedParticles',
+                'Vector2',
+                'Date',
+                'Math',
+                'console',
+                generatedCode
+            );
+            console.log(`✅ [${requestId}] Code compilation check passed`);
+        } catch (error) {
+            compilationError = error.message;
+            console.log(`❌ [${requestId}] Code compilation error: ${error.message}`);
+        }
+        
+        // Simplified validation - just pass the code through
         const validator = new AICodeValidator();
         const validation = validator.validateCode(prompt, generatedCode);
         
-        console.log(`\n🔍 [${requestId}] =================================`);
-        console.log(`🔍 [${requestId}] CODE VALIDATION ANALYSIS`);
-        console.log(`🔍 [${requestId}] =================================`);
-        console.log(`📊 [${requestId}] Validation Score: ${(validation.score * 100).toFixed(1)}%`);
-        console.log(`✅ [${requestId}] Code Alignment: ${validation.isValid ? 'VALID' : 'NEEDS REVIEW'}`);
-        console.log(`🎯 [${requestId}] User Intents: ${validation.userIntent.intents.map(i => i.type).join(', ')}`);
-        console.log(`⚙️ [${requestId}] Code Features: ${validation.codeFeatures.map(f => f.type).join(', ')}`);
-        
-        if (validation.suggestions.length > 0) {
-            console.log(`💡 [${requestId}] Suggestions:`);
-            validation.suggestions.forEach((suggestion, index) => {
-                console.log(`   ${index + 1}. ${suggestion.message}`);
-                console.log(`      Fix: ${suggestion.fix}`);
-            });
-        } else {
-            console.log(`✨ [${requestId}] No issues found - code looks good!`);
+        // Add compilation error to validation if present
+        if (compilationError) {
+            validation.compilationError = compilationError;
+            validation.isValid = false;
         }
+        
+        console.log(`\n🔍 [${requestId}] =================================`);
+        console.log(`🔍 [${requestId}] SIMPLIFIED CODE VALIDATION`);
+        console.log(`🔍 [${requestId}] =================================`);
+        console.log(`📝 [${requestId}] User Request: "${validation.userRequest}"`);
+        console.log(`💻 [${requestId}] Generated Code: Ready for AI critique`);
+        console.log(`✅ [${requestId}] Status: ${validation.isValid ? 'READY FOR REVIEW' : 'NEEDS ATTENTION'}`);
         console.log(`🔍 [${requestId}] =================================\n`);
+        
+        // Get AI critique from o4-mini
+        const aiCritique = await getCritiqueFromAI(requestId, prompt, generatedCode);
         
         // Extract name and description from the code for response
         const nameMatch = generatedCode.match(/super\('([^']+)'/);
@@ -183,15 +297,16 @@ Rules:
             description: tweakDescription,
             code: generatedCode,
             validation: {
-                score: validation.score,
+                userRequest: validation.userRequest,
+                generatedCode: validation.generatedCode,
                 isValid: validation.isValid,
                 suggestions: validation.suggestions,
-                userIntent: validation.userIntent,
-                codeFeatures: validation.codeFeatures
+                aiCritique: aiCritique  // Add AI critique to validation results
             }
         };
 
         console.log(`📤 [${requestId}] Sending response to frontend`);
+        console.log(`🧠 [${requestId}] AI Critique in final response:`, JSON.stringify(aiCritique, null, 2));
         console.log(`⏱️  [${requestId}] Total request duration: ${duration}ms`);
         console.log(`🎉 [${requestId}] AI Tweak generation completed successfully!\n`);
 

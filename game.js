@@ -1276,8 +1276,10 @@ async function generateBotTweak(botNumber) {
         if (tweakData.validation) {
             displayValidationFeedback(botNumber, tweakData.validation, description);
             
-            // If validation score is low, ask user to confirm
-            if (tweakData.validation.score < 0.8) {
+            // Always show validation dialog when we have validation data
+            const hasValidation = tweakData.validation;
+            
+            if (hasValidation) {
                 const shouldProceed = await showValidationDialog(botNumber, tweakData.validation, tweakData);
                 if (!shouldProceed) {
                     // User chose to regenerate
@@ -1301,8 +1303,7 @@ async function generateBotTweak(botNumber) {
         aiTweaks[botNumber] = tweakPlugin;
         
         // Update status and clear input
-        const validationScore = tweakData.validation ? Math.round(tweakData.validation.score * 100) : 100;
-        statusElement.textContent = `✅ Tweak Generated: ${tweakPlugin.name} (${validationScore}% match)`;
+        statusElement.textContent = `✅ Tweak Generated: ${tweakPlugin.name}`;
         statusElement.style.color = '#00ff88';
         inputElement.value = '';
         
@@ -1327,71 +1328,31 @@ async function generateBotTweak(botNumber) {
 }
 
 function displayValidationFeedback(botNumber, validation, userRequest) {
-    console.log(`🔍 Validation feedback for ${botNumber}:`);
-    console.log(`📊 Score: ${Math.round(validation.score * 100)}%`);
-    console.log(`🎯 User wanted: ${userRequest}`);
-    console.log(`⚙️ Code implements: ${validation.codeFeatures.map(f => f.description).join(', ')}`);
+    console.log(`🔍 Simplified validation feedback for ${botNumber}:`);
+    console.log(`🎯 User request: ${userRequest}`);
+    console.log(`💻 Generated code ready for review`);
+    console.log(`🔍 Full validation object:`, JSON.stringify(validation, null, 2));
     
-    if (validation.suggestions.length > 0) {
-        console.log(`💡 Suggestions:`);
-        validation.suggestions.forEach(suggestion => {
-            console.log(`   - ${suggestion.message}`);
-        });
+    // Debug AI critique availability
+    if (validation.aiCritique) {
+        console.log(`🧠 AI Critique available:`, validation.aiCritique);
+        console.log(`🧠 AI Critique type:`, typeof validation.aiCritique);
+        console.log(`🧠 AI Critique keys:`, Object.keys(validation.aiCritique));
+        if (validation.aiCritique.error) {
+            console.log(`❌ AI Critique error:`, validation.aiCritique.error);
+        } else if (validation.aiCritique.rawText) {
+            console.log(`✅ AI Critique rawText found:`, validation.aiCritique.rawText);
+        } else {
+            console.log(`⚠️  AI Critique object exists but no rawText or error`);
+        }
+    } else {
+        console.log(`❌ No AI critique found in validation`);
     }
 }
 
 async function showValidationDialog(botNumber, validation, tweakData) {
     return new Promise((resolve) => {
-        const score = Math.round(validation.score * 100);
-        
-        // Create characteristics summary
-        const allCharacteristics = [
-            { name: 'Speed', type: 'speed_modification', icon: '⚡' },
-            { name: 'Size', type: 'size_modification', icon: '🔄' },
-            { name: 'Heel Arc', type: 'heel_modification', icon: '🎯' },
-            { name: 'Health', type: 'health_modification', icon: '❤️' },
-            { name: 'Invisibility', type: 'invisibility_effect', icon: '👻' }
-        ];
-        
-        const requestedTypes = validation.userIntent.intents.map(i => i.type);
-        const implementedTypes = validation.codeFeatures.map(f => f.type);
-        
-        let characteristicsSummary = '';
-        let hasAnyCharacteristics = false;
-        
-        allCharacteristics.forEach(char => {
-            const requested = requestedTypes.includes(char.type);
-            const implemented = implementedTypes.includes(char.type);
-            
-            if (requested || implemented) {
-                hasAnyCharacteristics = true;
-                let status = '';
-                let statusColor = '';
-                if (requested && implemented) {
-                    status = '✅ Implemented';
-                    statusColor = '#00ff88';
-                } else if (requested && !implemented) {
-                    status = '❌ Missing';
-                    statusColor = '#ff6b6b';
-                } else if (!requested && implemented) {
-                    status = '➕ Added (bonus)';
-                    statusColor = '#3498db';
-                }
-                
-                characteristicsSummary += `
-                    <div style="display: flex; justify-content: space-between; align-items: center; margin: 8px 0; padding: 8px; background: rgba(255,255,255,0.05); border-radius: 4px;">
-                        <span>${char.icon} ${char.name}</span>
-                        <span style="color: ${statusColor}; font-weight: bold;">${status}</span>
-                    </div>
-                `;
-            }
-        });
-        
-        if (!hasAnyCharacteristics) {
-            characteristicsSummary = '<div style="text-align: center; color: #888; font-style: italic;">No specific characteristics detected.</div>';
-        }
-        
-        // Create custom dialog
+        // Create custom dialog focused on showing code and AI critique
         const dialog = document.createElement('div');
         dialog.style.cssText = `
             position: fixed;
@@ -1404,25 +1365,75 @@ async function showValidationDialog(botNumber, validation, tweakData) {
             padding: 25px;
             color: white;
             font-family: 'Courier New', monospace;
-            max-width: 600px;
+            max-width: 700px;
             max-height: 80vh;
             overflow-y: auto;
             z-index: 10000;
             text-align: center;
         `;
         
-        dialog.innerHTML = `
-            <div style="margin-bottom: 20px;">
-                <h3 style="margin: 0 0 15px 0; color: #00ff88;">🤖 AI Tweak Analysis (${score}% match)</h3>
-                <div style="text-align: left; background: rgba(0,0,0,0.3); padding: 15px; border-radius: 5px; margin-bottom: 15px;">
-                    <strong>📊 Characteristics Summary:</strong><br><br>
-                    <div style="font-family: monospace; line-height: 1.6;">
-                        ${characteristicsSummary || 'No specific characteristics detected.'}
+        // Generate compilation error section if present
+        let compilationErrorSection = '';
+        if (validation.compilationError) {
+            compilationErrorSection = `
+                <div style="text-align: left; background: rgba(20,0,0,0.4); padding: 15px; border-radius: 5px; margin-bottom: 15px; border: 1px solid #e74c3c;">
+                    <strong style="color: #e74c3c;">⚠️ Code Compilation Error:</strong><br><br>
+                    <div style="color: #ff6b6b; font-family: monospace; background: rgba(0,0,0,0.3); padding: 10px; border-radius: 3px;">
+                        ${validation.compilationError}
+                    </div>
+                    <div style="color: #ffcc88; margin-top: 10px; font-size: 12px;">
+                        This code has syntax errors and will not run. Please try again with a different description.
                     </div>
                 </div>
-                <div style="margin: 15px 0;">
-                    <button id="viewCode" style="margin: 5px; padding: 8px 12px; background: #3498db; color: white; border: none; border-radius: 5px; cursor: pointer; font-size: 12px;">👁️ View Generated Code</button>
+            `;
+        }
+
+        // Generate AI critique section
+        let aiCritiqueSection = '';
+        if (validation.aiCritique && validation.aiCritique.rawText) {
+            aiCritiqueSection = `
+                <div style="text-align: left; background: rgba(0,0,20,0.4); padding: 15px; border-radius: 5px; margin-bottom: 15px; border: 1px solid #3498db;">
+                    <strong style="color: #3498db;">🧠 AI Code Review:</strong><br><br>
+                    <div style="background: rgba(255,255,255,0.03); padding: 15px; border-radius: 4px; font-family: monospace; line-height: 1.6; white-space: pre-wrap; color: #e6e6e6; max-height: 300px; overflow-y: auto;">
+${validation.aiCritique.rawText}
+                    </div>
                 </div>
+            `;
+        } else if (validation.aiCritique && validation.aiCritique.error) {
+            aiCritiqueSection = `
+                <div style="text-align: left; background: rgba(20,0,0,0.4); padding: 15px; border-radius: 5px; margin-bottom: 15px; border: 1px solid #e74c3c;">
+                    <strong style="color: #e74c3c;">🧠 AI Code Review:</strong><br><br>
+                    <div style="color: #ff6b6b;">
+                        ❌ AI critique unavailable: ${validation.aiCritique.error}
+                    </div>
+                </div>
+            `;
+        } else {
+            aiCritiqueSection = `
+                <div style="text-align: left; background: rgba(20,20,0,0.4); padding: 15px; border-radius: 5px; margin-bottom: 15px; border: 1px solid #ffa500;">
+                    <strong style="color: #ffa500;">🧠 AI Code Review:</strong><br><br>
+                    <div style="color: #ffcc88;">
+                        ⏳ AI critique is loading or unavailable
+                    </div>
+                </div>
+            `;
+        }
+
+        // Always show the generated code prominently
+        dialog.innerHTML = `
+            <div style="margin-bottom: 20px;">
+                <h3 style="margin: 0 0 15px 0; color: #00ff88;">🤖 AI Generated Tweak</h3>
+                
+                <div style="text-align: left; background: rgba(20,20,20,0.9); padding: 15px; border-radius: 5px; margin-bottom: 15px; border: 1px solid #444;">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+                        <strong style="color: #00ff88;">📄 Generated Code:</strong>
+                        <button id="copyCode" style="padding: 4px 8px; background: #555; color: white; border: none; border-radius: 3px; cursor: pointer; font-size: 10px;">📋 Copy</button>
+                    </div>
+                    <pre style="margin: 0; white-space: pre-wrap; color: #e6e6e6; font-size: 10px; max-height: 250px; overflow-y: auto; background: rgba(40,40,40,0.8); padding: 10px; border-radius: 3px;">${tweakData.code.replace(/</g, '&lt;').replace(/>/g, '&gt;')}</pre>
+                </div>
+                
+                ${compilationErrorSection}
+                ${aiCritiqueSection}
             </div>
             <div>
                 <button id="useAnyway" style="margin: 5px; padding: 10px 15px; background: #00ff88; color: black; border: none; border-radius: 5px; cursor: pointer; font-weight: bold;">✅ Use This Tweak</button>
@@ -1432,102 +1443,14 @@ async function showValidationDialog(botNumber, validation, tweakData) {
         
         document.body.appendChild(dialog);
         
-        // View code functionality
-        let codeVisible = false;
-        document.getElementById('viewCode').onclick = () => {
-            if (!codeVisible) {
-                const codeDiv = document.createElement('div');
-                codeDiv.id = 'codeDisplay';
-                codeDiv.style.cssText = `
-                    text-align: left; 
-                    background: rgba(20,20,20,0.9); 
-                    padding: 15px; 
-                    border-radius: 5px; 
-                    margin: 15px 0;
-                    border: 1px solid #444;
-                    font-size: 11px;
-                    line-height: 1.4;
-                    max-height: 300px;
-                    overflow-y: auto;
-                `;
-                // Generate code sections based on intents
-                let codeSections = '';
-                
-                // Show full code first
-                codeSections += `
-                    <div style="margin-bottom: 15px;">
-                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
-                            <strong style="color: #00ff88;">📄 Complete Generated Code:</strong>
-                            <button id="copyCode" style="padding: 4px 8px; background: #555; color: white; border: none; border-radius: 3px; cursor: pointer; font-size: 10px;">📋 Copy</button>
-                        </div>
-                        <pre style="margin: 0; white-space: pre-wrap; color: #e6e6e6; font-size: 10px; max-height: 200px; overflow-y: auto; background: rgba(40,40,40,0.8); padding: 10px; border-radius: 3px;">${tweakData.code.replace(/</g, '&lt;').replace(/>/g, '&gt;')}</pre>
-                    </div>
-                `;
-                
-                // Show code breakdown by implemented intents
-                if (implementedTypes.length > 0) {
-                    codeSections += `<div style="margin-top: 15px; border-top: 1px solid #444; padding-top: 15px;">`;
-                    codeSections += `<strong style="color: #3498db;">🔧 Code Breakdown by Feature:</strong><br><br>`;
-                    
-                    implementedTypes.forEach(featureType => {
-                        const char = allCharacteristics.find(c => c.type === featureType);
-                        if (char) {
-                            // Extract relevant code snippets
-                            let snippet = '';
-                            if (featureType === 'speed_modification') {
-                                const speedMatch = tweakData.code.match(/(bot\.velocity.*|speedMultiplier.*|velocity.*multiply.*)/g);
-                                snippet = speedMatch ? speedMatch.slice(0, 2).join('\\n') : 'Speed-related code detected';
-                            } else if (featureType === 'size_modification') {
-                                const sizeMatch = tweakData.code.match(/(bot\.radius.*|originalRadius.*)/g);
-                                snippet = sizeMatch ? sizeMatch.slice(0, 2).join('\\n') : 'Size-related code detected';
-                            } else if (featureType === 'health_modification') {
-                                const healthMatch = tweakData.code.match(/(bot\.health.*|maxHealth.*)/g);
-                                snippet = healthMatch ? healthMatch.slice(0, 2).join('\\n') : 'Health-related code detected';
-                            } else if (featureType === 'heel_modification') {
-                                const heelMatch = tweakData.code.match(/(bot\.heelArcAngle.*)/g);
-                                snippet = heelMatch ? heelMatch.slice(0, 2).join('\\n') : 'Heel-related code detected';
-                            } else if (featureType === 'invisibility_effect') {
-                                const invisMatch = tweakData.code.match(/(globalAlpha.*|stealth.*|invisible.*)/g);
-                                snippet = invisMatch ? invisMatch.slice(0, 2).join('\\n') : 'Invisibility-related code detected';
-                            }
-                            
-                            codeSections += `
-                                <div style="margin: 10px 0; padding: 10px; background: rgba(255,255,255,0.03); border-radius: 4px; border-left: 3px solid #3498db;">
-                                    <div style="font-weight: bold; margin-bottom: 5px;">${char.icon} ${char.name}:</div>
-                                    <code style="font-size: 9px; color: #a0a0a0; background: rgba(0,0,0,0.3); padding: 5px; border-radius: 2px; display: block;">${snippet}</code>
-                                </div>
-                            `;
-                        }
-                    });
-                    codeSections += `</div>`;
-                }
-                
-                codeDiv.innerHTML = codeSections;
-                
-                // Find the button container (last div) and insert before it
-                const buttonContainer = dialog.children[dialog.children.length - 1];
-                dialog.insertBefore(codeDiv, buttonContainer);
-                
-                // Copy functionality
-                document.getElementById('copyCode').onclick = () => {
-                    navigator.clipboard.writeText(tweakData.code);
-                    document.getElementById('copyCode').textContent = '✅ Copied!';
-                    setTimeout(() => {
-                        const btn = document.getElementById('copyCode');
-                        if (btn) btn.textContent = '📋 Copy';
-                    }, 2000);
-                };
-                
-                document.getElementById('viewCode').textContent = '👁️ Hide Code';
-                codeVisible = true;
-            } else {
-                const codeDiv = document.getElementById('codeDisplay');
-                if (codeDiv) {
-                    codeDiv.remove();
-                }
-                document.getElementById('viewCode').textContent = '👁️ View Generated Code';
-                codeVisible = false;
-            }
+        // Copy functionality
+        document.getElementById('copyCode').onclick = () => {
+            navigator.clipboard.writeText(tweakData.code);
+            document.getElementById('copyCode').textContent = '✅ Copied!';
+            setTimeout(() => {
+                const btn = document.getElementById('copyCode');
+                if (btn) btn.textContent = '📋 Copy';
+            }, 2000);
         };
         
         document.getElementById('useAnyway').onclick = () => {
