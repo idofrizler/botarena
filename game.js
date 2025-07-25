@@ -28,11 +28,6 @@ const GAME_CONFIG = {
         maxHealth: 5,
         invulnerabilityTime: 1000 // 1 second of invulnerability after hit
     },
-    mobile: {
-        isMobile: false,
-        scaleFactor: 1,
-        reducedParticles: false
-    }
 };
 
 // Game state
@@ -1077,99 +1072,9 @@ function drawArena() {
     ctx.shadowBlur = 0;
 }
 
-// Mobile detection and setup
-function detectMobile() {
-    const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
-    const isSmallScreen = window.innerWidth <= 768 || window.innerHeight <= 600;
-    
-    GAME_CONFIG.mobile.isMobile = isMobile || isSmallScreen;
-    
-    if (GAME_CONFIG.mobile.isMobile) {
-        // Enable reduced particles for better performance
-        GAME_CONFIG.mobile.reducedParticles = true;
-        
-        // Set up responsive canvas scaling
-        setupResponsiveCanvas();
-        
-        // Handle orientation changes
-        window.addEventListener('orientationchange', handleOrientationChange);
-        window.addEventListener('resize', handleResize);
-        
-        // Handle orientation hint
-        handleOrientationHint();
-    }
-}
-
-function setupResponsiveCanvas() {
-    const canvas = document.getElementById('gameCanvas');
-    const scoreBoard = document.querySelector('.score-board');
-    
-    function updateCanvasSize() {
-        // Get the actual width of the score board to match it exactly
-        const scoreBoardWidth = scoreBoard ? scoreBoard.offsetWidth : window.innerWidth - 20;
-        
-        const aspectRatio = GAME_CONFIG.canvas.baseHeight / GAME_CONFIG.canvas.baseWidth;
-        
-        // Make canvas match score board width exactly
-        let newWidth = scoreBoardWidth;
-        let newHeight = newWidth * aspectRatio;
-        
-        // Ensure minimum playable size
-        const minWidth = 300;
-        if (newWidth < minWidth) {
-            newWidth = minWidth;
-            newHeight = newWidth * aspectRatio;
-        }
-        
-        // Calculate scale factor for mobile optimizations
-        GAME_CONFIG.mobile.scaleFactor = newWidth / GAME_CONFIG.canvas.baseWidth;
-        
-        // Update canvas dimensions to match score board width
-        canvas.style.width = `${newWidth}px`;
-        canvas.style.height = `${newHeight}px`;
-        
-        // Keep internal canvas dimensions consistent
-        GAME_CONFIG.canvas.width = GAME_CONFIG.canvas.baseWidth;
-        GAME_CONFIG.canvas.height = GAME_CONFIG.canvas.baseHeight;
-        GAME_CONFIG.arena.centerX = GAME_CONFIG.canvas.baseWidth / 2;
-        GAME_CONFIG.arena.centerY = GAME_CONFIG.canvas.baseHeight / 2;
-    }
-    
-    updateCanvasSize();
-}
-
-function handleOrientationChange() {
-    setTimeout(() => {
-        handleOrientationHint();
-        if (GAME_CONFIG.mobile.isMobile) {
-            setupResponsiveCanvas();
-        }
-    }, 100);
-}
-
-function handleResize() {
-    if (GAME_CONFIG.mobile.isMobile) {
-        setupResponsiveCanvas();
-    }
-}
-
-function handleOrientationHint() {
-    const orientationHint = document.getElementById('orientationHint');
-    const isPortrait = window.innerHeight > window.innerWidth;
-    const isSmallScreen = window.innerWidth <= 768;
-    
-    if (isPortrait && isSmallScreen) {
-        orientationHint.style.display = 'flex';
-    } else {
-        orientationHint.style.display = 'none';
-    }
-}
-
-// Override particle creation for mobile performance
+// Particle creation function
 function createOptimizedParticles(x, y, color, count, angle = null, speed = null) {
-    const particleCount = GAME_CONFIG.mobile.reducedParticles ? Math.ceil(count / 2) : count;
-    
-    for (let i = 0; i < particleCount; i++) {
+    for (let i = 0; i < count; i++) {
         const particleAngle = angle !== null ? angle : Math.random() * Math.PI * 2;
         const particleSpeed = speed !== null ? speed : 2 + Math.random() * 3;
         
@@ -1582,7 +1487,6 @@ function updateTweakIndicatorsWithAI() {
 
 // Initialize when page loads
 window.addEventListener('load', () => {
-    detectMobile();
     init();
     initAIInterface();
 });
