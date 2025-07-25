@@ -1462,14 +1462,6 @@ ${validation.aiCritique.rawText}
             document.body.removeChild(dialog);
             resolve(false);
         };
-        
-        // Auto-close after 45 seconds and use anyway
-        setTimeout(() => {
-            if (document.body.contains(dialog)) {
-                document.body.removeChild(dialog);
-                resolve(true);
-            }
-        }, 45000);
     });
 }
 
