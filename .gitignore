@@ -64,3 +64,9 @@ Thumbs.db
 # Temporary files
 tmp/
 temp/
+
+# Azure deployment artifacts
+botarena-deploy.zip
+webapp_logs.zip
+LogFiles/
+deployments/
