@@ -37,7 +37,7 @@ IMPROVE YOUR PROMPT: [Specific suggestions for how the user should rephrase thei
 Keep it concise and actionable.`;
 
         const critiqueResponse = await critiqueClient.chat.completions.create({
-            model: "o4-mini",
+            model: process.env.AZURE_CRITIQUE_DEPLOYMENT,
             messages: [
                 {
                     role: "system",
@@ -86,8 +86,8 @@ Keep it concise and actionable.`;
 const client = new AzureOpenAI({
     endpoint: process.env.AZURE_OPENAI_ENDPOINT,
     apiKey: process.env.AZURE_OPENAI_API_KEY,
-    deployment: "gpt-4.1",
-    apiVersion: "2024-04-01-preview"
+    deployment: process.env.AZURE_OPENAI_DEPLOYMENT,
+    apiVersion: process.env.AZURE_OPENAI_API_VERSION
 });
 
 // Critique client (o4-mini)
@@ -212,7 +212,7 @@ Rules:
 
         // Call Azure OpenAI
         const response = await client.chat.completions.create({
-            model: "gpt-4.1",
+            model: process.env.AZURE_OPENAI_DEPLOYMENT,
             messages: messages,
             max_completion_tokens: 1000,
             temperature: 0.7,
