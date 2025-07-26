@@ -1,84 +1,36 @@
 const express = require('express');
 const cors = require('cors');
 const path = require('path');
+const fs = require('fs');
 require('dotenv').config();
 
 // Azure OpenAI client setup
 const { AzureOpenAI } = require('openai');
 
-// Import AI validation system
-const { AICodeValidator } = require('./ai-validation.js');
+// Frontend content cache
+let gameJsContent = null;
+let styleCssContent = null;
+let indexHtmlContent = null;
 
-// AI Code Critique Function
-async function getCritiqueFromAI(requestId, userRequest, generatedCode) {
+// Load frontend files content on server startup
+function loadFrontendContent() {
     try {
-        console.log(`🧠 [${requestId}] Sending code to o4-mini for critique...`);
+        // Load game.js
+        gameJsContent = fs.readFileSync(path.join(__dirname, 'game.js'), 'utf8');
+        console.log('✅ Game.js content loaded successfully');
         
-        const critiquePrompt = `You are a code reviewer for a 2D bumper bot game. Review this AI-generated code and provide a clear verdict.
-
-USER REQUEST: "${userRequest}"
-
-GENERATED CODE:
-\`\`\`javascript
-${generatedCode}
-\`\`\`
-
-CONTEXT: Bots bounce around an arena trying to hit each other's rotating "achilles heel" (green arc). Game runs at 60fps with momentum-based physics.
-
-Provide your response in this EXACT format:
-
-VERDICT: [Looks good/Try again]
-
-REASONING: [1-2 sentences explaining why the code works or doesn't work for the user's request]
-
-If verdict is "TRY AGAIN", also include:
-IMPROVE YOUR PROMPT: [Specific suggestions for how the user should rephrase their request to get better results. Focus on being more specific, mentioning game mechanics, or clarifying the desired behavior.]
-
-Keep it concise and actionable.`;
-
-        const critiqueResponse = await critiqueClient.chat.completions.create({
-            model: process.env.AZURE_CRITIQUE_DEPLOYMENT,
-            messages: [
-                {
-                    role: "system",
-                    content: "You are a senior code reviewer. Provide clear, structured feedback."
-                },
-                {
-                    role: "user",
-                    content: critiquePrompt
-                }
-            ],
-            max_completion_tokens: 4000  // Generous limit for detailed critiques
-        });
-
-        console.log(`🧠 [${requestId}] Raw critique response:`, JSON.stringify(critiqueResponse, null, 2));
+        // Load style.css
+        styleCssContent = fs.readFileSync(path.join(__dirname, 'style.css'), 'utf8');
+        console.log('✅ Style.css content loaded successfully');
         
-        const critiqueText = critiqueResponse.choices[0]?.message?.content?.trim() || '';
-        console.log(`🧠 [${requestId}] o4-mini critique received (length: ${critiqueText.length}):`, critiqueText);
+        // Load index.html
+        indexHtmlContent = fs.readFileSync(path.join(__dirname, 'index.html'), 'utf8');
+        console.log('✅ Index.html content loaded successfully');
         
-        // If empty response, provide a helpful fallback
-        if (!critiqueText || critiqueText.length === 0) {
-            console.log(`⚠️  [${requestId}] Empty critique received, using fallback`);
-            return {
-                rawText: "AI code review is temporarily unavailable. The generated code appears syntactically correct and should be safe to test.",
-                isRawText: true,
-                fallback: true
-            };
-        }
-        
-        // Return the raw text as-is, no parsing
-        return {
-            rawText: critiqueText,
-            isRawText: true
-        };
-        
+        return true;
     } catch (error) {
-        console.error(`❌ [${requestId}] Error getting AI critique:`, error.message);
-        return {
-            rawText: "AI critique unavailable due to technical error: " + error.message,
-            isRawText: true,
-            error: error.message
-        };
+        console.error('❌ Failed to load frontend files:', error.message);
+        throw new Error('Cannot start server without frontend content');
     }
 }
 
@@ -88,21 +40,6 @@ const client = new AzureOpenAI({
     apiKey: process.env.AZURE_OPENAI_API_KEY,
     deployment: process.env.AZURE_OPENAI_DEPLOYMENT,
     apiVersion: process.env.AZURE_OPENAI_API_VERSION
-});
-
-// Critique client (o4-mini)
-const critiqueClient = new AzureOpenAI({
-    endpoint: process.env.AZURE_CRITIQUE_ENDPOINT || process.env.AZURE_OPENAI_ENDPOINT,
-    apiKey: process.env.AZURE_CRITIQUE_API_KEY || process.env.AZURE_OPENAI_API_KEY,
-    deployment: process.env.AZURE_CRITIQUE_DEPLOYMENT || "o4-mini",
-    apiVersion: process.env.AZURE_CRITIQUE_API_VERSION || "2024-04-01-preview"
-});
-
-console.log(`🔧 Critique client config:`, {
-    endpoint: process.env.AZURE_CRITIQUE_ENDPOINT || process.env.AZURE_OPENAI_ENDPOINT,
-    deployment: process.env.AZURE_CRITIQUE_DEPLOYMENT || "o4-mini",
-    apiVersion: process.env.AZURE_CRITIQUE_API_VERSION || "2024-04-01-preview",
-    hasApiKey: !!(process.env.AZURE_CRITIQUE_API_KEY || process.env.AZURE_OPENAI_API_KEY)
 });
 
 const app = express();
@@ -139,61 +76,36 @@ app.post('/api/generate-tweak', async (req, res) => {
 
         const systemPrompt = `You are a JavaScript game developer creating dynamic tweaks for a 2D bumper bot arena game.
 
-GAME MECHANICS CONTEXT:
-- Bots are circular objects that bounce around an octagonal arena
-- Each bot has an "achilles heel" - a green arc that rotates around the bot's perimeter
-- Players win by hitting the opponent's achilles heel arc (not by visual modifications)
-- The achilles heel size can be modified per-bot using bot.heelArcAngle property
-- Bots are drawn as simple circles with white borders, no complex shapes
-- Built-in tweaks modify: bot.radius, bot.health/maxHealth, regeneration timers, etc.
-
-EXAMPLE BUILT-IN TWEAKS:
-- Smaller Size: bot.radius = GAME_CONFIG.bots.radius * 0.7
-- Extra Life: bot.health = 6; bot.maxHealth = 6
-- Regeneration: Adds lastRegenTime tracking and health restoration
-
 IMPORTANT: You must respond with ONLY valid JavaScript code that returns a TweakPlugin instance. No explanations, no markdown, no backticks.
 
-Available TweakPlugin lifecycle hooks:
-- onBotInit(bot): Called when bot is created - set initial properties here
-- onBotUpdate(bot, deltaTime): Called each frame (60fps) - ongoing effects here  
-- onBotCollision(bot, otherBot): Called when bots collide - collision effects here
-- onBotDamage(bot): Called when bot takes damage - damage effects here
-- onBotDraw(bot, ctx): Called during rendering - visual effects here (DO NOT redraw the main bot)
+COMPLETE FRONTEND SOURCE CODE FOR REFERENCE:
 
-Available bot properties:
-- position (Vector2): bot's x,y position
-- velocity (Vector2): bot's movement vector  
-- health, maxHealth: current and maximum health
-- radius: bot size (safe to modify)
-- color: bot color (safe to modify)
-- heelArcAngle: achilles heel arc size in radians (default: π*0.6, safe range: π/8 to π)
-- lastHitTime: timestamp of last damage taken
-- bodyAngle: rotation angle for achilles heel
-- squashScale: animation scale factor
+GAME LOGIC (game.js):
+\`\`\`javascript
+${gameJsContent}
+\`\`\`
 
-Available utilities:
-- Vector2 class with add, subtract, multiply, normalize, magnitude methods
-- createOptimizedParticles(x, y, color, count) for effects
-- GAME_CONFIG constants for game settings
-- Date, Math, console objects
+STYLING (style.css):
+\`\`\`css
+${styleCssContent}
+\`\`\`
 
-CRITICAL VECTOR2 API:
-- To get speed: bot.velocity.magnitude() (NOT .length())
-- To normalize: bot.velocity.normalize()
-- To multiply: bot.velocity.multiply(scalar)
-- Example speed boost: bot.velocity = bot.velocity.normalize().multiply(newSpeed)
+HTML STRUCTURE (index.html):
+\`\`\`html
+${indexHtmlContent}
+\`\`\`
+
+You have complete knowledge of the game mechanics, UI elements, styling classes, and DOM structure. Use this knowledge to create tweaks that integrate perfectly with the existing codebase and can leverage UI elements, animations, and visual effects.
 
 Rules:
 1. Create a class that extends TweakPlugin
-2. Constructor must have: super('ai-[type]-\${Date.now()}', 'Name', 'Description')
-3. Focus on gameplay mechanics, not visual redesigns
-4. DO NOT redraw the main bot circle in onBotDraw
-5. DO NOT modify GAME_CONFIG values
-6. Make tweaks fun but balanced
+2. Constructor must have: super('ai-[type]-\${Date.now()}', 'Name', 'Description')  
+3. Focus on gameplay mechanics
+4. You can use CSS classes like .shake, .pulse, and DOM elements by ID
+5. Make tweaks balanced and fun, not overpowered
+6. Only change what the user asked for; don't add extra features
 7. End with: return new YourTweakClass();
-8. NO markdown, NO explanations, ONLY JavaScript code
-9. ALWAYS use bot.velocity.magnitude() to get speed (NOT .length())`;
+8. NO markdown, NO explanations, ONLY JavaScript code`;
 
         const messages = [
             {
@@ -240,48 +152,7 @@ Rules:
         console.log(generatedCode);
         console.log(`📝 [${requestId}] =================================`);
         console.log(`📝 [${requestId}] Generated Code Length: ${generatedCode.length} characters`);
-        
-        // Basic code compilation check
-        let compilationError = null;
-        try {
-            // Try to create the function to check for syntax errors
-            new Function(
-                'TweakPlugin',
-                'GAME_CONFIG', 
-                'createOptimizedParticles',
-                'Vector2',
-                'Date',
-                'Math',
-                'console',
-                generatedCode
-            );
-            console.log(`✅ [${requestId}] Code compilation check passed`);
-        } catch (error) {
-            compilationError = error.message;
-            console.log(`❌ [${requestId}] Code compilation error: ${error.message}`);
-        }
-        
-        // Simplified validation - just pass the code through
-        const validator = new AICodeValidator();
-        const validation = validator.validateCode(prompt, generatedCode);
-        
-        // Add compilation error to validation if present
-        if (compilationError) {
-            validation.compilationError = compilationError;
-            validation.isValid = false;
-        }
-        
-        console.log(`\n🔍 [${requestId}] =================================`);
-        console.log(`🔍 [${requestId}] SIMPLIFIED CODE VALIDATION`);
-        console.log(`🔍 [${requestId}] =================================`);
-        console.log(`📝 [${requestId}] User Request: "${validation.userRequest}"`);
-        console.log(`💻 [${requestId}] Generated Code: Ready for AI critique`);
-        console.log(`✅ [${requestId}] Status: ${validation.isValid ? 'READY FOR REVIEW' : 'NEEDS ATTENTION'}`);
-        console.log(`🔍 [${requestId}] =================================\n`);
-        
-        // Get AI critique from o4-mini
-        const aiCritique = await getCritiqueFromAI(requestId, prompt, generatedCode);
-        
+
         // Extract name and description from the code for response
         const nameMatch = generatedCode.match(/super\('([^']+)'/);
         const descMatch = generatedCode.match(/'([^']+)', '([^']+)'/);
@@ -295,18 +166,10 @@ Rules:
         const responseData = {
             name: tweakName,
             description: tweakDescription,
-            code: generatedCode,
-            validation: {
-                userRequest: validation.userRequest,
-                generatedCode: validation.generatedCode,
-                isValid: validation.isValid,
-                suggestions: validation.suggestions,
-                aiCritique: aiCritique  // Add AI critique to validation results
-            }
+            code: generatedCode
         };
 
         console.log(`📤 [${requestId}] Sending response to frontend`);
-        console.log(`🧠 [${requestId}] AI Critique in final response:`, JSON.stringify(aiCritique, null, 2));
         console.log(`⏱️  [${requestId}] Total request duration: ${duration}ms`);
         console.log(`🎉 [${requestId}] AI Tweak generation completed successfully!\n`);
 
@@ -335,6 +198,9 @@ Rules:
 app.get('/api/health', (req, res) => {
     res.json({ status: 'OK', message: 'Bot Arena AI service is running' });
 });
+
+// Load frontend content on server startup
+loadFrontendContent();
 
 app.listen(PORT, () => {
     console.log(`🤖 Bot Arena server running on http://localhost:${PORT}`);

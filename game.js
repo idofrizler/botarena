@@ -1177,27 +1177,6 @@ async function generateBotTweak(botNumber) {
     try {
         const tweakData = await aiTweakService.generateTweak(description);
         
-        // Check validation results
-        if (tweakData.validation) {
-            displayValidationFeedback(botNumber, tweakData.validation, description);
-            
-            // Always show validation dialog when we have validation data
-            const hasValidation = tweakData.validation;
-            
-            if (hasValidation) {
-                const shouldProceed = await showValidationDialog(botNumber, tweakData.validation, tweakData);
-                if (!shouldProceed) {
-                    // User chose to regenerate
-                    generateBtn.disabled = false;
-                    generateBtn.querySelector('.btn-text').style.display = 'inline';
-                    generateBtn.querySelector('.btn-loading').style.display = 'none';
-                    statusElement.textContent = 'Try describing your tweak differently for better results.';
-                    statusElement.style.color = '#ffa500';
-                    return;
-                }
-            }
-        }
-        
         // Execute the generated code to create the tweak plugin
         const tweakPlugin = executeAITweakCode(tweakData.code);
         
@@ -1213,7 +1192,6 @@ async function generateBotTweak(botNumber) {
         inputElement.value = '';
         
         console.log(`AI Tweak Generated for ${botNumber}:`, tweakPlugin);
-        console.log(`Validation Results:`, tweakData.validation);
         
         // Close overlay after success
         setTimeout(() => {
@@ -1232,143 +1210,6 @@ async function generateBotTweak(botNumber) {
     }
 }
 
-function displayValidationFeedback(botNumber, validation, userRequest) {
-    console.log(`🔍 Simplified validation feedback for ${botNumber}:`);
-    console.log(`🎯 User request: ${userRequest}`);
-    console.log(`💻 Generated code ready for review`);
-    console.log(`🔍 Full validation object:`, JSON.stringify(validation, null, 2));
-    
-    // Debug AI critique availability
-    if (validation.aiCritique) {
-        console.log(`🧠 AI Critique available:`, validation.aiCritique);
-        console.log(`🧠 AI Critique type:`, typeof validation.aiCritique);
-        console.log(`🧠 AI Critique keys:`, Object.keys(validation.aiCritique));
-        if (validation.aiCritique.error) {
-            console.log(`❌ AI Critique error:`, validation.aiCritique.error);
-        } else if (validation.aiCritique.rawText) {
-            console.log(`✅ AI Critique rawText found:`, validation.aiCritique.rawText);
-        } else {
-            console.log(`⚠️  AI Critique object exists but no rawText or error`);
-        }
-    } else {
-        console.log(`❌ No AI critique found in validation`);
-    }
-}
-
-async function showValidationDialog(botNumber, validation, tweakData) {
-    return new Promise((resolve) => {
-        // Create custom dialog focused on showing code and AI critique
-        const dialog = document.createElement('div');
-        dialog.style.cssText = `
-            position: fixed;
-            top: 50%;
-            left: 50%;
-            transform: translate(-50%, -50%);
-            background: rgba(0, 0, 0, 0.95);
-            border: 2px solid #00ff88;
-            border-radius: 10px;
-            padding: 25px;
-            color: white;
-            font-family: 'Courier New', monospace;
-            max-width: 700px;
-            max-height: 80vh;
-            overflow-y: auto;
-            z-index: 10000;
-            text-align: center;
-        `;
-        
-        // Generate compilation error section if present
-        let compilationErrorSection = '';
-        if (validation.compilationError) {
-            compilationErrorSection = `
-                <div style="text-align: left; background: rgba(20,0,0,0.4); padding: 15px; border-radius: 5px; margin-bottom: 15px; border: 1px solid #e74c3c;">
-                    <strong style="color: #e74c3c;">⚠️ Code Compilation Error:</strong><br><br>
-                    <div style="color: #ff6b6b; font-family: monospace; background: rgba(0,0,0,0.3); padding: 10px; border-radius: 3px;">
-                        ${validation.compilationError}
-                    </div>
-                    <div style="color: #ffcc88; margin-top: 10px; font-size: 12px;">
-                        This code has syntax errors and will not run. Please try again with a different description.
-                    </div>
-                </div>
-            `;
-        }
-
-        // Generate AI critique section
-        let aiCritiqueSection = '';
-        if (validation.aiCritique && validation.aiCritique.rawText) {
-            aiCritiqueSection = `
-                <div style="text-align: left; background: rgba(0,0,20,0.4); padding: 15px; border-radius: 5px; margin-bottom: 15px; border: 1px solid #3498db;">
-                    <strong style="color: #3498db;">🧠 AI Code Review:</strong><br><br>
-                    <div style="background: rgba(255,255,255,0.03); padding: 15px; border-radius: 4px; font-family: monospace; line-height: 1.6; white-space: pre-wrap; color: #e6e6e6; max-height: 300px; overflow-y: auto;">
-${validation.aiCritique.rawText}
-                    </div>
-                </div>
-            `;
-        } else if (validation.aiCritique && validation.aiCritique.error) {
-            aiCritiqueSection = `
-                <div style="text-align: left; background: rgba(20,0,0,0.4); padding: 15px; border-radius: 5px; margin-bottom: 15px; border: 1px solid #e74c3c;">
-                    <strong style="color: #e74c3c;">🧠 AI Code Review:</strong><br><br>
-                    <div style="color: #ff6b6b;">
-                        ❌ AI critique unavailable: ${validation.aiCritique.error}
-                    </div>
-                </div>
-            `;
-        } else {
-            aiCritiqueSection = `
-                <div style="text-align: left; background: rgba(20,20,0,0.4); padding: 15px; border-radius: 5px; margin-bottom: 15px; border: 1px solid #ffa500;">
-                    <strong style="color: #ffa500;">🧠 AI Code Review:</strong><br><br>
-                    <div style="color: #ffcc88;">
-                        ⏳ AI critique is loading or unavailable
-                    </div>
-                </div>
-            `;
-        }
-
-        // Always show the generated code prominently
-        dialog.innerHTML = `
-            <div style="margin-bottom: 20px;">
-                <h3 style="margin: 0 0 15px 0; color: #00ff88;">🤖 AI Generated Tweak</h3>
-                
-                <div style="text-align: left; background: rgba(20,20,20,0.9); padding: 15px; border-radius: 5px; margin-bottom: 15px; border: 1px solid #444;">
-                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
-                        <strong style="color: #00ff88;">📄 Generated Code:</strong>
-                        <button id="copyCode" style="padding: 4px 8px; background: #555; color: white; border: none; border-radius: 3px; cursor: pointer; font-size: 10px;">📋 Copy</button>
-                    </div>
-                    <pre style="margin: 0; white-space: pre-wrap; color: #e6e6e6; font-size: 10px; max-height: 250px; overflow-y: auto; background: rgba(40,40,40,0.8); padding: 10px; border-radius: 3px;">${tweakData.code.replace(/</g, '&lt;').replace(/>/g, '&gt;')}</pre>
-                </div>
-                
-                ${compilationErrorSection}
-                ${aiCritiqueSection}
-            </div>
-            <div>
-                <button id="useAnyway" style="margin: 5px; padding: 10px 15px; background: #00ff88; color: black; border: none; border-radius: 5px; cursor: pointer; font-weight: bold;">✅ Use This Tweak</button>
-                <button id="tryAgain" style="margin: 5px; padding: 10px 15px; background: #ff6b6b; color: white; border: none; border-radius: 5px; cursor: pointer;">🔄 Try Again</button>
-            </div>
-        `;
-        
-        document.body.appendChild(dialog);
-        
-        // Copy functionality
-        document.getElementById('copyCode').onclick = () => {
-            navigator.clipboard.writeText(tweakData.code);
-            document.getElementById('copyCode').textContent = '✅ Copied!';
-            setTimeout(() => {
-                const btn = document.getElementById('copyCode');
-                if (btn) btn.textContent = '📋 Copy';
-            }, 2000);
-        };
-        
-        document.getElementById('useAnyway').onclick = () => {
-            document.body.removeChild(dialog);
-            resolve(true);
-        };
-        
-        document.getElementById('tryAgain').onclick = () => {
-            document.body.removeChild(dialog);
-            resolve(false);
-        };
-    });
-}
 
 // Make closeBotAIOverlay globally available for onclick handlers
 window.closeBotAIOverlay = closeBotAIOverlay;
