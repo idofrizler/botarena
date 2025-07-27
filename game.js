@@ -35,12 +35,6 @@ const GAME_CONFIG = {
             cooldown: 500,
             projectileSpeed: 8,
             size: 3
-        },
-        spike: {
-            damage: 1,
-            range: 30,
-            cooldown: 1000,
-            size: 15
         }
     },
 };
@@ -526,30 +520,11 @@ class Weapon {
         ctx.rotate(this.angle);
         
         ctx.strokeStyle = '#666';
-        ctx.lineWidth = 3;
+        ctx.lineWidth = 6;
         ctx.beginPath();
         ctx.moveTo(this.owner.radius, 0);
         ctx.lineTo(this.owner.radius + 8, 0);
         ctx.stroke();
-        
-        ctx.restore();
-    }
-    
-    drawSpike(ctx) {
-        // Draw retractable spike
-        const extension = this.canFire() ? 5 : 15;
-        
-        ctx.save();
-        ctx.translate(this.owner.position.x, this.owner.position.y);
-        ctx.rotate(this.angle);
-        
-        ctx.fillStyle = '#ff6b6b';
-        ctx.beginPath();
-        ctx.moveTo(this.owner.radius, 0);
-        ctx.lineTo(this.owner.radius + extension, -4);
-        ctx.lineTo(this.owner.radius + extension, 4);
-        ctx.closePath();
-        ctx.fill();
         
         ctx.restore();
     }
@@ -608,7 +583,7 @@ class Projectile {
             
             const distance = this.position.subtract(bot.position).magnitude();
             if (distance < bot.radius + this.size) {
-                // Check if projectile hit the achilles heel
+                // Blaster only damages heel hits
                 if (bot.isPointInAchillesHeel(this.position, this.size)) {
                     console.log(`💥 ${this.type} hit Bot ${bot.id}'s heel! Health: ${bot.health - 1}`);
                     if (bot.takeDamage()) {
@@ -1290,7 +1265,13 @@ function draw() {
     projectiles.forEach(projectile => projectile.draw(ctx));
     
     // Draw bots
-    bots.forEach(bot => bot.draw(ctx));
+    bots.forEach(bot => {
+        bot.draw(ctx);
+        // Draw weapon if bot has one
+        if (bot.weapon) {
+            bot.weapon.draw(ctx);
+        }
+    });
 }
 
 function drawArena() {
