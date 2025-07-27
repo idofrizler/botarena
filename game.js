@@ -28,6 +28,21 @@ const GAME_CONFIG = {
         maxHealth: 5,
         invulnerabilityTime: 1000 // 1 second of invulnerability after hit
     },
+    weapons: {
+        blaster: {
+            damage: 1,
+            range: 150,
+            cooldown: 500,
+            projectileSpeed: 8,
+            size: 3
+        },
+        spike: {
+            damage: 1,
+            range: 30,
+            cooldown: 1000,
+            size: 15
+        }
+    },
 };
 
 // Game state
@@ -49,6 +64,7 @@ let canvas, ctx;
 // Game objects
 let bots = [];
 let particles = [];
+let projectiles = [];
 let arenaVertices = [];
 
 // UI elements
@@ -115,10 +131,19 @@ class RegenerationTweak extends TweakPlugin {
             if (timeSinceLastRegen >= 60000) { 
                 bot.health = Math.min(bot.health + 1, bot.maxHealth);
                 bot.lastRegenTime = Date.now();
-                createOptimizedParticles(bot.position.x, bot.position.y, '#00ff88', 10);
                 console.log(`Bot ${bot.id} regenerated! Health: ${bot.health}`);
             }
         }
+    }
+}
+
+class BlasterTweak extends TweakPlugin {
+    constructor() {
+        super('blaster', 'Blaster Gun', 'Equipped with a rapid-fire blaster');
+    }
+    
+    onBotInit(bot) {
+        bot.weapon = new Weapon('blaster', bot);
     }
 }
 
@@ -134,6 +159,7 @@ class TweakRegistry {
         this.register(new SmallerSizeTweak());
         this.register(new ExtraLifeTweak());
         this.register(new RegenerationTweak());
+        this.register(new BlasterTweak());
     }
     
     register(tweak) {
@@ -421,6 +447,211 @@ End with: return new YourTweakClass();
 // Global AI service instance
 const aiTweakService = new AITweakService();
 
+// Weapon System Classes
+class Weapon {
+    constructor(type, owner) {
+        this.type = type;
+        this.owner = owner;
+        this.config = GAME_CONFIG.weapons[type];
+        this.lastFireTime = 0;
+        this.angle = 0; // Weapon facing direction
+    }
+    
+    canFire() {
+        return Date.now() - this.lastFireTime >= this.config.cooldown;
+    }
+    
+    fire() {
+        if (!this.canFire()) return null;
+        
+        this.lastFireTime = Date.now();
+        
+        if (this.type === 'blaster') {
+            return this.fireBlaster();
+        } else if (this.type === 'spike') {
+            return this.fireSpike();
+        }
+        
+        return null;
+    }
+    
+    fireBlaster() {
+        const startPos = this.owner.position.add(
+            new Vector2(Math.cos(this.angle), Math.sin(this.angle)).multiply(this.owner.radius + 5)
+        );
+        
+        return new Projectile(
+            startPos,
+            new Vector2(Math.cos(this.angle), Math.sin(this.angle)).multiply(this.config.projectileSpeed),
+            this.owner,
+            this.config.damage,
+            'blaster'
+        );
+    }
+    
+    fireSpike() {
+        const spikePos = this.owner.position.add(
+            new Vector2(Math.cos(this.angle), Math.sin(this.angle)).multiply(this.owner.radius + this.config.range / 2)
+        );
+        
+        return new Projectile(
+            spikePos,
+            new Vector2(0, 0), // Spike doesn't move
+            this.owner,
+            this.config.damage,
+            'spike',
+            200 // Short lifetime for spike
+        );
+    }
+    
+    update(deltaTime) {
+        // Update weapon angle based on bot's movement direction
+        if (this.owner.velocity.magnitude() > 0.1) {
+            this.angle = Math.atan2(this.owner.velocity.y, this.owner.velocity.x);
+        }
+    }
+    
+    draw(ctx) {
+        if (this.type === 'blaster') {
+            this.drawBlaster(ctx);
+        } else if (this.type === 'spike') {
+            this.drawSpike(ctx);
+        }
+    }
+    
+    drawBlaster(ctx) {
+        // Draw small barrel extending from bot
+        ctx.save();
+        ctx.translate(this.owner.position.x, this.owner.position.y);
+        ctx.rotate(this.angle);
+        
+        ctx.strokeStyle = '#666';
+        ctx.lineWidth = 3;
+        ctx.beginPath();
+        ctx.moveTo(this.owner.radius, 0);
+        ctx.lineTo(this.owner.radius + 8, 0);
+        ctx.stroke();
+        
+        ctx.restore();
+    }
+    
+    drawSpike(ctx) {
+        // Draw retractable spike
+        const extension = this.canFire() ? 5 : 15;
+        
+        ctx.save();
+        ctx.translate(this.owner.position.x, this.owner.position.y);
+        ctx.rotate(this.angle);
+        
+        ctx.fillStyle = '#ff6b6b';
+        ctx.beginPath();
+        ctx.moveTo(this.owner.radius, 0);
+        ctx.lineTo(this.owner.radius + extension, -4);
+        ctx.lineTo(this.owner.radius + extension, 4);
+        ctx.closePath();
+        ctx.fill();
+        
+        ctx.restore();
+    }
+}
+
+class Projectile {
+    constructor(position, velocity, owner, damage, type, lifetime = 2000) {
+        this.position = new Vector2(position.x, position.y);
+        this.velocity = new Vector2(velocity.x, velocity.y);
+        this.owner = owner;
+        this.damage = damage;
+        this.type = type;
+        this.createTime = Date.now();
+        this.lifetime = lifetime;
+        this.size = GAME_CONFIG.weapons[type].size;
+        this.active = true;
+    }
+    
+    update(deltaTime) {
+        if (!this.active) return;
+        
+        // Check lifetime
+        if (Date.now() - this.createTime > this.lifetime) {
+            this.active = false;
+            return;
+        }
+        
+        // Update position for moving projectiles
+        if (this.type !== 'spike') {
+            this.position = this.position.add(this.velocity);
+        }
+        
+        // Check wall collisions
+        this.checkWallCollisions();
+        
+        // Check bot collisions
+        this.checkBotCollisions();
+    }
+    
+    checkWallCollisions() {
+        // Simple arena boundary check
+        const centerX = GAME_CONFIG.arena.centerX;
+        const centerY = GAME_CONFIG.arena.centerY;
+        const radius = GAME_CONFIG.arena.radius;
+        
+        const distFromCenter = this.position.subtract(new Vector2(centerX, centerY)).magnitude();
+        if (distFromCenter > radius - 10) {
+            this.active = false;
+        }
+    }
+    
+    checkBotCollisions() {
+        bots.forEach(bot => {
+            if (bot === this.owner) return; // Can't hit self
+            if (bot.isInvulnerable()) return; // Can't hit invulnerable bots
+            
+            const distance = this.position.subtract(bot.position).magnitude();
+            if (distance < bot.radius + this.size) {
+                // Check if projectile hit the achilles heel
+                if (bot.isPointInAchillesHeel(this.position, this.size)) {
+                    console.log(`💥 ${this.type} hit Bot ${bot.id}'s heel! Health: ${bot.health - 1}`);
+                    if (bot.takeDamage()) {
+                        console.log(`✅ Heel damage applied! Bot ${bot.id} health: ${bot.health}`);
+                    }
+                } else {
+                    console.log(`❌ ${this.type} hit Bot ${bot.id} but missed the heel - no damage`);
+                }
+                this.active = false; // Projectile is destroyed regardless
+            }
+        });
+    }
+    
+    draw(ctx) {
+        if (!this.active) return;
+        
+        ctx.save();
+        
+        if (this.type === 'blaster') {
+            // Draw glowing projectile
+            ctx.globalAlpha = 0.8;
+            ctx.fillStyle = '#00ffff';
+            ctx.beginPath();
+            ctx.arc(this.position.x, this.position.y, this.size, 0, Math.PI * 2);
+            ctx.fill();
+            
+            // Add glow effect
+            ctx.globalAlpha = 0.3;
+            ctx.beginPath();
+            ctx.arc(this.position.x, this.position.y, this.size * 2, 0, Math.PI * 2);
+            ctx.fill();
+        } else if (this.type === 'spike') {
+            // Spike is drawn by the weapon itself
+        }
+        
+        ctx.restore();
+    }
+    
+    isDead() {
+        return !this.active;
+    }
+}
+
 // Vector utility functions
 class Vector2 {
     constructor(x = 0, y = 0) {
@@ -489,6 +720,10 @@ class Bot {
         this.targetAngle = this.angle;
         this.aiTimer = 0;
         
+        // Weapon system
+        this.weapon = null;
+        this.autoFire = true; // Bots auto-fire when they can
+        
         // Get and store the tweak plugin
         this.tweakPlugin = tweakRegistry.get(tweakId);
         
@@ -518,6 +753,19 @@ class Bot {
         
         // Rotate the achilles heel continuously
         this.bodyAngle += 0.02; // Slow rotation speed
+        
+        // Update weapon
+        if (this.weapon) {
+            this.weapon.update(deltaTime);
+            
+            // Auto-fire logic
+            if (this.autoFire && this.weapon.canFire()) {
+                const projectile = this.weapon.fire();
+                if (projectile) {
+                    projectiles.push(projectile);
+                }
+            }
+        }
         
         // Call tweak update hook
         this.tweakPlugin.onBotUpdate(this, deltaTime);
@@ -582,9 +830,6 @@ class Bot {
         setTimeout(() => {
             document.querySelector('.game-container').classList.remove('shake');
         }, 300);
-
-        // Create hit particles
-        this.createHitParticles();
         
         // Call tweak damage hook
         this.tweakPlugin.onBotDamage(this);
@@ -592,9 +837,6 @@ class Bot {
         return true;
     }
 
-    createHitParticles() {
-        createOptimizedParticles(this.position.x, this.position.y, '#ff6b6b', 15);
-    }
 
     isInvulnerable() {
         return Date.now() - this.lastHitTime < GAME_CONFIG.game.invulnerabilityTime;
@@ -759,7 +1001,8 @@ function updateTweakIndicators() {
         'none': '',
         'smaller': 'SMALL',
         'regeneration': 'REGEN',
-        'extra-life': 'EXTRA'
+        'extra-life': 'EXTRA',
+        'blaster': 'BLAST'
     };
     
     bot1TweakIndicatorEl.textContent = tweakNames[gameState.tweaks.bot1];
@@ -808,8 +1051,9 @@ function startGame() {
         console.log(`Bot ${index} (${bot.color}) - Heel Center: ${centerDegrees.toFixed(1)}°, Arc: ${startDegrees.toFixed(1)}° to ${endDegrees.toFixed(1)}°`);
     });
     
-    // Clear particles
+    // Clear particles and projectiles
     particles = [];
+    projectiles = [];
     
     // Update UI
     updateUI();
@@ -844,6 +1088,10 @@ function update() {
     // Update particles
     particles.forEach(particle => particle.update());
     particles = particles.filter(particle => !particle.isDead());
+    
+    // Update projectiles
+    projectiles.forEach(projectile => projectile.update(deltaTime));
+    projectiles = projectiles.filter(projectile => !projectile.isDead());
     
     // Check win condition
     checkWinCondition();
@@ -880,16 +1128,6 @@ function checkWallCollision(bot) {
             const dot = bot.velocity.dot(normal);
             bot.velocity = bot.velocity.subtract(normal.multiply(2 * dot));
             
-            // Create bounce particles
-            for (let j = 0; j < 5; j++) {
-                particles.push(new Particle(
-                    closest.x,
-                    closest.y,
-                    '#ffffff',
-                    Math.random() * Math.PI * 2,
-                    1 + Math.random() * 2
-                ));
-            }
         }
     }
 }
@@ -1047,6 +1285,9 @@ function draw() {
     
     // Draw particles
     particles.forEach(particle => particle.draw(ctx));
+    
+    // Draw projectiles
+    projectiles.forEach(projectile => projectile.draw(ctx));
     
     // Draw bots
     bots.forEach(bot => bot.draw(ctx));
@@ -1302,7 +1543,8 @@ function updateTweakIndicatorsWithAI() {
         'none': '',
         'smaller': 'SMALL',
         'regeneration': 'REGEN',
-        'extra-life': 'EXTRA'
+        'extra-life': 'EXTRA',
+        'blaster': 'BLAST'
     };
     
     // Handle AI tweak display
